@@ -219,7 +219,7 @@
                         <li data-tab="size-master"><a href="#item-size"><i class="fa-solid fa-ruler-combined"></i> Item Size</a></li>
                         <li data-tab="add-product"><a href="#add-product"><i class="fa-solid fa-square-plus"></i> Add Product</a></li>
                         <li data-tab="add-combo"><a href="#add-combo-product"><i class="fa-solid fa-cubes"></i> Add Combo Product</a></li>
-                        <li data-tab="combo-list"><a href="#combo-packs"><i class="fa-solid fa-sitemap"></i> Combo Packs List</a></li>
+                        <li data-tab="combo-list"><a href="#combo-packs"><i class="fa-solid fa-sitemap"></i> Combination Product</a></li>
                         <li data-tab="product-reports"><a href="#product-reports"><i class="fa-solid fa-file-chart-pie"></i> Product Reports</a></li>
                     </ul>
 
@@ -778,55 +778,34 @@
                     </div>
                 </section>
 
-                <!-- 2.6 ADD COMBO PRODUCT -->
+                <!-- 2.6 COMBINATION PRODUCT -->
                 <section id="tab-combo-list" class="tab-pane">
-                    <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 25px;">
-                        <div class="card">
-                            <div class="card-header">
-                                <h3>Create Combo Pack Bundle</h3>
-                            </div>
-                            <div class="card-body">
-                                <form id="combo-form">
-                                    <div class="form-row">
-                                        <div class="form-group col-6">
-                                            <label for="combo-name">Combo Pack Name *</label>
-                                            <input type="text" id="combo-name" class="form-control" placeholder="e.g. Festival Season Bridal Set" required>
-                                        </div>
-                                        <div class="form-group col-6">
-                                            <label for="combo-price">Combo Sale Price (₹) *</label>
-                                            <input type="number" id="combo-price" class="form-control" step="0.01" required>
-                                        </div>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Add Component Products into this Combo:</label>
-                                        <div id="combo-items-container" style="border: 1px solid var(--border-color); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                                            <!-- component selection lines -->
-                                        </div>
-                                        <button type="button" class="btn btn-secondary btn-sm" id="btn-add-combo-item"><i class="fa-solid fa-plus"></i> Add Component</button>
-                                    </div>
-                                    <button type="submit" class="btn btn-primary">Create Combo Product</button>
-                                </form>
-                            </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Combination Products List</h3>
                         </div>
-                        <div class="card">
-                            <div class="card-header">
-                                <h3>Registered Combo Products</h3>
-                            </div>
-                            <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table" id="combo-table">
-                                        <thead>
-                                            <tr>
-                                                <th>#</th>
-                                                <th>Combo Name</th>
-                                                <th>Price</th>
-                                                <th>Components</th>
-                                                <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody></tbody>
-                                    </table>
-                                </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table" id="combo-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Product Name</th>
+                                            <th>Catalogue</th>
+                                            <th>Sub Group</th>
+                                            <th>Color</th>
+                                            <th>Item Size</th>
+                                            <th>Qty</th>
+                                            <th>Pieces</th>
+                                            <th>Purchase Rate</th>
+                                            <th>R1 Rate</th>
+                                            <th>R2 Rate</th>
+                                            <th>R3 Rate</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -835,6 +814,12 @@
                 <!-- 2.7 COMBINATION PRODUCT -->
                 <section id="tab-add-combo" class="tab-pane">
                     <form id="combo-generator-form" style="padding: 10px 0;">
+                        <!-- Search option to auto-fill details -->
+                        <div class="form-group" style="position: relative; margin-bottom: 20px; width: 100%;">
+                            <label for="gen-search-product" style="font-weight: 600; color: var(--dark-bg); font-size: 0.9rem;">Search Existing Product (Keyword)</label>
+                            <input type="text" id="gen-search-product" class="form-control" placeholder="Type name, catalog, group, color, or size to search...">
+                            <div id="gen-search-results" class="search-results-dropdown"></div>
+                        </div>
                         <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
                             <div class="form-group" style="flex: 1; min-width: 150px;">
                                 <label for="gen-catalogue">catalouge</label>
