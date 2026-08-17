@@ -489,16 +489,12 @@ class BindiMarketApp {
     // ==========================================
     populatePartDropdowns() {
         const citySelect = document.getElementById('part-city');
-        citySelect.innerHTML = '<option value="">-- Select City --</option>';
-        this.db.cities.forEach(c => {
-            citySelect.innerHTML += `<option value="${c.name}">${c.name}</option>`;
-        });
-
-        const bankSelect = document.getElementById('part-bank');
-        bankSelect.innerHTML = '<option value="">-- Select Bank (Optional) --</option>';
-        this.db.banks.forEach(b => {
-            bankSelect.innerHTML += `<option value="${b.name}">${b.name} (${b.account_no || ''})</option>`;
-        });
+        if (citySelect) {
+            citySelect.innerHTML = '<option value="">-- Select City --</option>';
+            this.db.cities.forEach(c => {
+                citySelect.innerHTML += `<option value="${c.name}">${c.name}</option>`;
+            });
+        }
     }
 
     handlePartSubmit(e) {
