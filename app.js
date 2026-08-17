@@ -268,6 +268,24 @@ class BindiMarketApp {
             }
         });
 
+        // Outward Rate Selection exclusivity and price recalculation
+        ['outward-opt-r1', 'outward-opt-r2', 'outward-opt-r3'].forEach(id => {
+            const chk = document.getElementById(id);
+            if (chk) {
+                chk.addEventListener('change', (e) => {
+                    if (e.target.checked) {
+                        ['outward-opt-r1', 'outward-opt-r2', 'outward-opt-r3'].forEach(otherId => {
+                            if (otherId !== id) {
+                                const otherChk = document.getElementById(otherId);
+                                if (otherChk) otherChk.checked = false;
+                            }
+                        });
+                    }
+                    this.updateOutwardRowPrices();
+                });
+            }
+        });
+
         // Combo component add button
         const btnAddCombo = document.getElementById('btn-add-combo-item');
         if (btnAddCombo) {
@@ -1273,10 +1291,10 @@ class BindiMarketApp {
                 <select class="form-control inward-prod-select" onchange="app.handleInwardProductChange('${rowId}', this.value)" required>
                     ${prodOptions}
                 </select>
-                <input type="number" class="form-control inward-pkt" placeholder="Box" min="0" oninput="app.calculateInwardRow('${rowId}')" required>
-                <input type="number" class="form-control inward-per-pkt" placeholder="Pieces" min="0" oninput="app.calculateInwardRow('${rowId}')" required>
+                <input type="number" class="form-control inward-pkt" placeholder="Box" min="0" oninput="app.calculateInwardRow('${rowId}', 'pkt')" required>
+                <input type="number" class="form-control inward-per-pkt" placeholder="Pieces" value="10" min="0" oninput="app.calculateInwardRow('${rowId}', 'per-pkt')" required>
                 <input type="number" class="form-control inward-total-qty" placeholder="Pieces" readonly>
-                <input type="number" class="form-control inward-price" placeholder="Price" step="0.01" min="0" oninput="app.calculateInwardRow('${rowId}')" required>
+                <input type="number" class="form-control inward-price" placeholder="Price" step="0.01" min="0" oninput="app.calculateInwardRow('${rowId}', 'price')" required>
                 <input type="number" class="form-control inward-total" placeholder="Total" readonly>
                 <button type="button" class="btn-remove-row" onclick="app.removeInwardRow('${rowId}')"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -1300,17 +1318,28 @@ class BindiMarketApp {
         const prod = this.db.products.find(p => p.id === pId);
         const row = document.getElementById(`row-${rowId}`);
         if (prod && row) {
-            row.querySelector('.inward-price').value = prod.cost_price;
+            row.querySelector('.inward-price').value = prod.purchase_price || prod.cost_price || 0;
+            const perPktInput = row.querySelector('.inward-per-pkt');
+            if (perPktInput && !perPktInput.value) {
+                perPktInput.value = 10;
+            }
             this.calculateInwardRow(rowId);
         }
     }
 
-    calculateInwardRow(rowId) {
+    calculateInwardRow(rowId, trigger) {
         const row = document.getElementById(`row-${rowId}`);
         if (!row) return;
 
-        const pkt = parseFloat(row.querySelector('.inward-pkt').value) || 0;
-        const perPkt = parseFloat(row.querySelector('.inward-per-pkt').value) || 0;
+        const pktInput = row.querySelector('.inward-pkt');
+        const perPktInput = row.querySelector('.inward-per-pkt');
+        
+        if (trigger === 'pkt' && !perPktInput.value) {
+            perPktInput.value = 10;
+        }
+
+        const pkt = parseFloat(pktInput.value) || 0;
+        const perPkt = parseFloat(perPktInput.value) || 0;
         const price = parseFloat(row.querySelector('.inward-price').value) || 0;
 
         const totalQty = pkt * perPkt;
@@ -1404,12 +1433,20 @@ class BindiMarketApp {
         this.resetInwardForm();
         this.switchTab('inward-report');
     }
-
     renderInwardReport() {
         const tbody = document.querySelector('#inward-report-table tbody');
         if (!tbody) return;
         tbody.innerHTML = '';
+        
+        let totalPkts = 0;
+        let totalPieces = 0;
+        let grandTotalSum = 0;
+
         this.db.inwards.forEach(tx => {
+            totalPkts += tx.total_pkts || 0;
+            totalPieces += tx.total_pieces || 0;
+            grandTotalSum += tx.grand_total || 0;
+
             tbody.innerHTML += `
                 <tr>
                     <td><strong>${tx.id}</strong></td>
@@ -1427,6 +1464,18 @@ class BindiMarketApp {
                 </tr>
             `;
         });
+
+        if (this.db.inwards.length > 0) {
+            tbody.innerHTML += `
+                <tr style="background-color: #f8fafc; font-weight: 700; border-top: 2px solid #cbd5e1;">
+                    <td colspan="3"><strong>Total Sum:</strong></td>
+                    <td><strong>${totalPkts}</strong></td>
+                    <td><strong>${totalPieces}</strong></td>
+                    <td><strong>₹${grandTotalSum.toFixed(2)}</strong></td>
+                    <td></td>
+                </tr>
+            `;
+        }
     }
 
     deleteInward(id) {
@@ -1571,9 +1620,9 @@ class BindiMarketApp {
                 <select class="form-control outward-prod-select" onchange="app.handleOutwardProductChange('${rowId}', this.value)" required>
                     ${prodOptions}
                 </select>
-                <input type="number" class="form-control outward-pkt" placeholder="Box" min="0" oninput="app.calculateOutwardRow('${rowId}')" required>
-                <input type="number" class="form-control outward-pieces" placeholder="Pieces" min="0" oninput="app.calculateOutwardRow('${rowId}')" required>
-                <input type="number" class="form-control outward-price" placeholder="Price" step="0.01" min="0" oninput="app.calculateOutwardRow('${rowId}')" required>
+                <input type="number" class="form-control outward-pkt" placeholder="Box" min="0" oninput="app.calculateOutwardRow('${rowId}', 'pkt')" required>
+                <input type="number" class="form-control outward-pieces" placeholder="Pieces" min="0" oninput="app.calculateOutwardRow('${rowId}', 'pieces')" required>
+                <input type="number" class="form-control outward-price" placeholder="Price" step="0.01" min="0" oninput="app.calculateOutwardRow('${rowId}', 'price')" required>
                 <input type="number" class="form-control outward-total" placeholder="Total" readonly>
                 <button type="button" class="btn-remove-row" onclick="app.removeOutwardRow('${rowId}')"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -1596,21 +1645,81 @@ class BindiMarketApp {
         const prod = this.db.products.find(p => p.id === pId);
         const row = document.getElementById(`row-${rowId}`);
         if (prod && row) {
-            row.querySelector('.outward-price').value = prod.sell_price;
+            const optR1 = document.getElementById('outward-opt-r1')?.checked;
+            const optR2 = document.getElementById('outward-opt-r2')?.checked;
+            const optR3 = document.getElementById('outward-opt-r3')?.checked;
+            
+            let price = prod.sales_price || prod.sell_price || 0;
+            if (optR1 && prod.r1_rate) price = prod.r1_rate;
+            else if (optR2 && prod.r2_rate) price = prod.r2_rate;
+            else if (optR3 && prod.r3_rate) price = prod.r3_rate;
+            
+            row.querySelector('.outward-price').value = price;
+            
+            const pktInput = row.querySelector('.outward-pkt');
+            const pcsInput = row.querySelector('.outward-pieces');
+            const pkt = parseFloat(pktInput.value) || 0;
+            const pieces = parseFloat(pcsInput.value) || 0;
+            
+            if (pkt > 0 && pieces === 0) {
+                pcsInput.value = pkt * 10;
+            } else if (pieces > 0 && pkt === 0) {
+                pktInput.value = pieces / 10;
+            }
+            
             this.calculateOutwardRow(rowId);
         }
     }
 
-    calculateOutwardRow(rowId) {
+    calculateOutwardRow(rowId, trigger) {
         const row = document.getElementById(`row-${rowId}`);
         if (!row) return;
 
-        const pieces = parseFloat(row.querySelector('.outward-pieces').value) || 0;
+        const pktInput = row.querySelector('.outward-pkt');
+        const piecesInput = row.querySelector('.outward-pieces');
+        
+        if (trigger === 'pkt') {
+            const pkt = parseFloat(pktInput.value) || 0;
+            piecesInput.value = pkt * 10;
+        } else if (trigger === 'pieces') {
+            const pieces = parseFloat(piecesInput.value) || 0;
+            pktInput.value = pieces / 10;
+        }
+
+        const pieces = parseFloat(piecesInput.value) || 0;
         const price = parseFloat(row.querySelector('.outward-price').value) || 0;
 
         const total = pieces * price;
         row.querySelector('.outward-total').value = total.toFixed(2);
 
+        this.calculateOutwardGrandTotal();
+    }
+
+    updateOutwardRowPrices() {
+        const optR1 = document.getElementById('outward-opt-r1')?.checked;
+        const optR2 = document.getElementById('outward-opt-r2')?.checked;
+        const optR3 = document.getElementById('outward-opt-r3')?.checked;
+        
+        document.querySelectorAll('.outward-item-row').forEach(row => {
+            const select = row.querySelector('.outward-prod-select');
+            const pId = parseInt(select.value);
+            if (pId) {
+                const prod = this.db.products.find(p => p.id === pId);
+                if (prod) {
+                    let price = prod.sales_price || prod.sell_price || 0;
+                    if (optR1 && prod.r1_rate) price = prod.r1_rate;
+                    else if (optR2 && prod.r2_rate) price = prod.r2_rate;
+                    else if (optR3 && prod.r3_rate) price = prod.r3_rate;
+                    
+                    row.querySelector('.outward-price').value = price;
+                    
+                    // Recalculate row total
+                    const pieces = parseFloat(row.querySelector('.outward-pieces').value) || 0;
+                    const total = pieces * price;
+                    row.querySelector('.outward-total').value = total.toFixed(2);
+                }
+            }
+        });
         this.calculateOutwardGrandTotal();
     }
 
@@ -1747,12 +1856,20 @@ class BindiMarketApp {
         this.resetOutwardForm();
         this.switchTab('outward-report');
     }
-
     renderOutwardReport() {
         const tbody = document.querySelector('#outward-report-table tbody');
         if (!tbody) return;
         tbody.innerHTML = '';
+        
+        let totalPkts = 0;
+        let totalPieces = 0;
+        let grandTotalSum = 0;
+
         this.db.outwards.forEach(tx => {
+            totalPkts += tx.total_pkts || 0;
+            totalPieces += tx.total_pieces || 0;
+            grandTotalSum += tx.grand_total || 0;
+
             tbody.innerHTML += `
                 <tr>
                     <td><strong>${tx.id}</strong></td>
@@ -1770,6 +1887,18 @@ class BindiMarketApp {
                 </tr>
             `;
         });
+
+        if (this.db.outwards.length > 0) {
+            tbody.innerHTML += `
+                <tr style="background-color: #f8fafc; font-weight: 700; border-top: 2px solid #cbd5e1;">
+                    <td colspan="3"><strong>Total Sum:</strong></td>
+                    <td><strong>${totalPkts}</strong></td>
+                    <td><strong>${totalPieces}</strong></td>
+                    <td><strong>₹${grandTotalSum.toFixed(2)}</strong></td>
+                    <td></td>
+                </tr>
+            `;
+        }
     }
 
     deleteOutward(id) {
