@@ -1,0 +1,14 @@
+{
+  "name": "bindi-market-system",
+  "version": "1.0.0",
+  "description": "Bindi Market Management System with multi-PC sync capabilities",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "author": "Heet Punamiya",
+  "license": "ISC"
+}

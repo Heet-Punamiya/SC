@@ -16,7 +16,8 @@ class BindiMarketApp {
             products: [],
             combo_products: [],
             inwards: [],
-            outwards: []
+            outwards: [],
+            stitching: []
         };
         this.currentTab = 'dashboard';
         this.tradeChart = null;
@@ -25,26 +26,91 @@ class BindiMarketApp {
         this.init();
     }
 
-    init() {
-        this.loadDB();
+    async init() {
+        this.isServerConnected = false;
+        await this.loadDB();
         this.setupEventListeners();
         this.setupAccordionNav();
         this.updateGlobalCounters();
         this.renderAll();
-        
+
         // Set date
         document.getElementById('current-date').innerText = new Date().toLocaleDateString('en-US', {
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
         });
+
+        // Start auto-sync checking if connected to server
+        this.startAutoSync();
     }
 
-    loadDB() {
-        // Initialize localStorage lists if not existing
+    async loadDB() {
         const listKeys = [
-            'parties', 'cities', 'banks', 'catalogues', 'groups', 
-            'colors', 'sizes', 'products', 'combo_products', 'inwards', 'outwards'
+            'parties', 'cities', 'banks', 'catalogues', 'groups',
+            'colors', 'sizes', 'products', 'combo_products', 'inwards', 'outwards', 'stitching'
         ];
 
+        // Try to load from server first
+        try {
+            const response = await fetch('/api/db');
+            if (response.ok) {
+                const serverData = await response.json();
+                
+                // Check if the server database is completely empty (no items in any table)
+                const isServerEmpty = listKeys.every(key => !serverData[key] || serverData[key].length === 0);
+                
+                if (isServerEmpty) {
+                    // Check if the browser's localStorage contains any data from previous sessions
+                    let hasLocalData = false;
+                    const localData = {};
+                    listKeys.forEach(key => {
+                        try {
+                            const stored = localStorage.getItem(`bindi_${key}`);
+                            if (stored) {
+                                const parsed = JSON.parse(stored);
+                                if (Array.isArray(parsed) && parsed.length > 0) {
+                                    localData[key] = parsed;
+                                    hasLocalData = true;
+                                }
+                            }
+                        } catch (e) {}
+                    });
+                    
+                    // If local data exists, migrate/upload it to the server automatically
+                    if (hasLocalData) {
+                        console.log("Migrating existing local database to the server...");
+                        this.isServerConnected = true;
+                        for (const key of listKeys) {
+                            if (localData[key]) {
+                                this.db[key] = localData[key];
+                                // Save to server
+                                await fetch(`/api/db/${key}`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(this.db[key])
+                                });
+                            } else {
+                                this.db[key] = [];
+                            }
+                        }
+                        console.log("Database migration complete!");
+                        return;
+                    }
+                }
+
+                // If not empty, or after migration check, load server data
+                listKeys.forEach(key => {
+                    this.db[key] = serverData[key] || [];
+                });
+                console.log("Database loaded successfully from server.");
+                this.isServerConnected = true;
+                return;
+            }
+        } catch (err) {
+            console.warn("Failed to load database from server, falling back to localStorage:", err);
+        }
+
+        // Fallback to localStorage
+        this.isServerConnected = false;
         listKeys.forEach(key => {
             try {
                 const stored = localStorage.getItem(`bindi_${key}`);
@@ -61,13 +127,63 @@ class BindiMarketApp {
         });
     }
 
-    saveDB(key) {
+    async saveDB(key) {
+        // 1. Save to local storage (always do this as local backup/fallback)
         try {
             localStorage.setItem(`bindi_${key}`, JSON.stringify(this.db[key]));
         } catch (e) {
             console.warn(`localStorage save failed for key "bindi_${key}":`, e);
         }
+        
         this.updateGlobalCounters();
+
+        // 2. If server is connected, sync to server
+        if (this.isServerConnected) {
+            try {
+                const response = await fetch(`/api/db/${key}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.db[key])
+                });
+                if (!response.ok) {
+                    console.error(`Failed to sync key "${key}" to server`);
+                }
+            } catch (err) {
+                console.error(`Error syncing key "${key}" to server:`, err);
+            }
+        }
+    }
+
+    startAutoSync() {
+        if (!this.isServerConnected) return;
+        
+        setInterval(async () => {
+            try {
+                const response = await fetch('/api/db');
+                if (response.ok) {
+                    const serverData = await response.json();
+                    const listKeys = Object.keys(this.db);
+                    
+                    let changed = false;
+                    listKeys.forEach(key => {
+                        const localStr = JSON.stringify(this.db[key]);
+                        const serverStr = JSON.stringify(serverData[key] || []);
+                        if (localStr !== serverStr) {
+                            this.db[key] = serverData[key] || [];
+                            changed = true;
+                        }
+                    });
+                    
+                    if (changed) {
+                        console.log("Database updated from server sync.");
+                        this.updateGlobalCounters();
+                        this.renderTabSpecificData(this.currentTab);
+                    }
+                }
+            } catch (err) {
+                console.warn("Auto-sync fetch failed:", err);
+            }
+        }, 5000); // Check every 5 seconds
     }
 
     setupAccordionNav() {
@@ -80,7 +196,7 @@ class BindiMarketApp {
                 const submenuId = toggle.getAttribute('data-submenu');
                 console.log("Toggle clicked for submenu:", submenuId);
                 const submenu = document.getElementById(submenuId);
-                
+
                 if (!submenu) {
                     console.warn(`Submenu element not found: ${submenuId}`);
                     return;
@@ -88,7 +204,7 @@ class BindiMarketApp {
 
                 // Toggle this submenu
                 const isOpen = submenu.classList.contains('show');
-                
+
                 // Close other submenus first
                 document.querySelectorAll('.nav-submenu').forEach(sub => {
                     sub.classList.remove('show');
@@ -112,13 +228,13 @@ class BindiMarketApp {
             item.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                
+
                 // Remove active classes
                 document.querySelectorAll('.nav-submenu li').forEach(x => x.classList.remove('active'));
                 document.querySelectorAll('.nav-item').forEach(x => x.classList.remove('active'));
-                
+
                 item.classList.add('active');
-                
+
                 const tabName = item.getAttribute('data-tab');
                 if (tabName) {
                     this.switchTab(tabName);
@@ -135,7 +251,7 @@ class BindiMarketApp {
                 document.querySelectorAll('.nav-item-toggle').forEach(t => t.classList.remove('open'));
                 document.querySelectorAll('.nav-submenu li').forEach(x => x.classList.remove('active'));
                 document.querySelectorAll('.nav-item').forEach(x => x.classList.remove('active'));
-                
+
                 dashboardBtn.classList.add('active');
                 this.switchTab('dashboard');
             });
@@ -148,7 +264,7 @@ class BindiMarketApp {
             e.preventDefault();
             const email = document.getElementById('login-email').value;
             const pass = document.getElementById('login-password').value;
-            
+
             if (email.trim().toLowerCase() === 'admin@bindimarket.com' && pass.trim() === 'admin123') {
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('app-screen').style.display = 'flex';
@@ -361,6 +477,43 @@ class BindiMarketApp {
         focusNextInput('gen-purchase', 'gen-r1');
         focusNextInput('gen-r1', 'gen-r2');
         focusNextInput('gen-r2', 'gen-r3');
+
+        // Stitching Form Events
+        const stitchForm = document.getElementById('stitching-form');
+        if (stitchForm) {
+            stitchForm.addEventListener('submit', (e) => this.handleStitchingSubmit(e));
+        }
+
+        const stitchSearch = document.getElementById('stitch-report-search');
+        if (stitchSearch) {
+            stitchSearch.addEventListener('input', () => this.renderStitchingReport());
+        }
+
+        const calcStitchTotal = () => {
+            const avg = parseFloat(document.getElementById('stitch-avg').value) || 0;
+            const cost = parseFloat(document.getElementById('stitch-sheet-cost').value) || 0;
+            const totalEl = document.getElementById('stitch-total');
+            if (totalEl) {
+                totalEl.value = (avg * cost).toFixed(2);
+            }
+        };
+        const avgEl = document.getElementById('stitch-avg');
+        const costEl = document.getElementById('stitch-sheet-cost');
+        if (avgEl) avgEl.addEventListener('input', calcStitchTotal);
+        if (costEl) costEl.addEventListener('input', calcStitchTotal);
+
+        // Set up autocompletes for Stitching form
+        this.setupAutocomplete('stitch-item-name', 'stitch-item-name-results', () => {
+            return [...new Set(this.db.products.map(p => p.name))];
+        });
+
+        this.setupAutocomplete('stitch-size', 'stitch-size-results', () => {
+            return [...new Set(this.db.sizes.map(s => s.name))];
+        });
+
+        this.setupAutocomplete('stitch-color', 'stitch-color-results', () => {
+            return [...new Set(this.db.colors.map(c => c.name))];
+        });
     }
 
     switchTab(tabName) {
@@ -395,7 +548,9 @@ class BindiMarketApp {
             'add-inward': ['Add Inward Product', 'Import goods into catalog warehouse.'],
             'inward-report': ['Inward Reports', 'Browse purchase and imports database history.'],
             'add-outward': ['Add Outward Product', 'Export goods to wholesale buyers.'],
-            'outward-report': ['Outward Reports', 'Browse sales invoices and outward ledger.']
+            'outward-report': ['Outward Reports', 'Browse sales invoices and outward ledger.'],
+            'add-stitching': ['Add Stitching', 'Create a new stitching entry for bindi products.'],
+            'stitching-report': ['Stitching Report', 'Browse and manage stitching database records.']
         };
 
         if (titles[tabName]) {
@@ -460,6 +615,12 @@ class BindiMarketApp {
                 break;
             case 'outward-report':
                 this.renderOutwardReport();
+                break;
+            case 'add-stitching':
+                this.resetStitchingForm();
+                break;
+            case 'stitching-report':
+                this.renderStitchingReport();
                 break;
         }
     }
@@ -616,9 +777,9 @@ class BindiMarketApp {
         tbody.innerHTML = '';
         const search = document.getElementById('part-report-search').value.toLowerCase();
 
-        const filtered = this.db.parties.filter(p => 
-            p.name.toLowerCase().includes(search) || 
-            p.mobile.toLowerCase().includes(search) || 
+        const filtered = this.db.parties.filter(p =>
+            p.name.toLowerCase().includes(search) ||
+            p.mobile.toLowerCase().includes(search) ||
             p.city.toLowerCase().includes(search)
         );
 
@@ -873,7 +1034,7 @@ class BindiMarketApp {
         const r3_rate = parseFloat(document.getElementById('prod-r3-rate').value) || 0;
 
         const fileInput = document.getElementById('prod-image-file');
-        
+
         const save = (base64Image) => {
             if (id) {
                 const idx = this.db.products.findIndex(p => p.id === id || p.id === parseInt(id));
@@ -927,23 +1088,23 @@ class BindiMarketApp {
     editProduct(id) {
         const p = this.db.products.find(x => x.id === id || x.id === parseInt(id));
         if (!p) return;
-        
+
         this.switchTab('add-product');
-        
+
         document.getElementById('prod-id').value = p.id;
         document.getElementById('prod-name').value = p.name || '';
         document.getElementById('prod-catalogue').value = p.catalogue || '';
         document.getElementById('prod-size').value = p.size || '';
         document.getElementById('prod-group').value = p.group || '';
         document.getElementById('prod-color').value = p.color || '';
-        
+
         document.getElementById('prod-purchase-price').value = p.purchase_price || p.cost_price || 0;
         document.getElementById('prod-sales-price').value = p.sales_price || p.sell_price || 0;
-        
+
         document.getElementById('prod-qty').value = p.qty || 1;
         document.getElementById('prod-pieces').value = p.pieces || 0;
         document.getElementById('prod-inner-pieces').value = p.inner_pieces || 0;
-        
+
         document.getElementById('prod-r1-rate').value = p.r1_rate || p.sales_price || 0;
         document.getElementById('prod-r2-rate').value = p.r2_rate || 0;
         document.getElementById('prod-r3-rate').value = p.r3_rate || 0;
@@ -1019,7 +1180,7 @@ class BindiMarketApp {
             if (filterGrp && p.group !== filterGrp) return false;
             if (filterSz && p.size !== filterSz) return false;
             if (filterCol && p.color !== filterCol) return false;
-            
+
             if (searchVal) {
                 const nameMatch = p.name?.toLowerCase().includes(searchVal);
                 const catMatch = p.catalogue?.toLowerCase().includes(searchVal);
@@ -1028,7 +1189,7 @@ class BindiMarketApp {
                 const colMatch = p.color?.toLowerCase().includes(searchVal);
                 return nameMatch || catMatch || grpMatch || szMatch || colMatch;
             }
-            
+
             return true;
         });
 
@@ -1187,7 +1348,7 @@ class BindiMarketApp {
                 selectedSizes.forEach(sz => {
                     const suffixStr = sz.suffix ? `-${sz.suffix}` : '';
                     const prodName = `${catalogue} ${grp} ${col} ${sz.name}${suffixStr}`;
-                    
+
                     const newId = Date.now() + Math.floor(Math.random() * 100000);
                     this.db.products.push({
                         id: newId,
@@ -1360,7 +1521,7 @@ class BindiMarketApp {
         document.getElementById('inward-date').value = new Date().toISOString().substring(0, 10);
         document.getElementById('inward-rows-container').innerHTML = '';
         document.getElementById('inward-sub-total').value = '₹0.00';
-        
+
         // Populate party select (only suppliers or both)
         const pSelect = document.getElementById('inward-party');
         pSelect.innerHTML = '<option value="">-- Choose Party --</option>';
@@ -1428,7 +1589,7 @@ class BindiMarketApp {
 
         const pktInput = row.querySelector('.inward-pkt');
         const perPktInput = row.querySelector('.inward-per-pkt');
-        
+
         if (trigger === 'pkt' && !perPktInput.value) {
             perPktInput.value = 10;
         }
@@ -1457,11 +1618,11 @@ class BindiMarketApp {
 
     handleInwardSubmit(e, shouldPrint) {
         e.preventDefault();
-        
+
         const partyId = parseInt(document.getElementById('inward-party').value);
         const date = document.getElementById('inward-date').value;
         const notes = document.getElementById('inward-notes').value;
-        
+
         const party = this.db.parties.find(p => p.id === partyId);
         if (!party) return;
 
@@ -1532,7 +1693,7 @@ class BindiMarketApp {
         const tbody = document.querySelector('#inward-report-table tbody');
         if (!tbody) return;
         tbody.innerHTML = '';
-        
+
         let totalPkts = 0;
         let totalPieces = 0;
         let grandTotalSum = 0;
@@ -1610,7 +1771,7 @@ class BindiMarketApp {
 
     printInwardDocument(tx) {
         const printArea = document.getElementById('invoice-print-area');
-        
+
         let itemsHTML = '';
         tx.items.forEach((item, idx) => {
             const prod = this.db.products.find(p => p.id === item.product_id);
@@ -1681,7 +1842,7 @@ class BindiMarketApp {
         document.getElementById('outward-submit-form').reset();
         document.getElementById('outward-date').value = new Date().toISOString().substring(0, 10);
         document.getElementById('outward-rows-container').innerHTML = '';
-        
+
         // Populate party (customers or both)
         const pSelect = document.getElementById('outward-party');
         pSelect.innerHTML = '<option value="">-- Choose Party --</option>';
@@ -1743,25 +1904,25 @@ class BindiMarketApp {
             const optR1 = document.getElementById('outward-opt-r1')?.checked;
             const optR2 = document.getElementById('outward-opt-r2')?.checked;
             const optR3 = document.getElementById('outward-opt-r3')?.checked;
-            
+
             let price = prod.sales_price || prod.sell_price || 0;
             if (optR1 && prod.r1_rate) price = prod.r1_rate;
             else if (optR2 && prod.r2_rate) price = prod.r2_rate;
             else if (optR3 && prod.r3_rate) price = prod.r3_rate;
-            
+
             row.querySelector('.outward-price').value = price;
-            
+
             const pktInput = row.querySelector('.outward-pkt');
             const pcsInput = row.querySelector('.outward-pieces');
             const pkt = parseFloat(pktInput.value) || 0;
             const pieces = parseFloat(pcsInput.value) || 0;
-            
+
             if (pkt > 0 && pieces === 0) {
                 pcsInput.value = pkt * 10;
             } else if (pieces > 0 && pkt === 0) {
                 pktInput.value = pieces / 10;
             }
-            
+
             this.calculateOutwardRow(rowId);
         }
     }
@@ -1772,7 +1933,7 @@ class BindiMarketApp {
 
         const pktInput = row.querySelector('.outward-pkt');
         const piecesInput = row.querySelector('.outward-pieces');
-        
+
         if (trigger === 'pkt') {
             const pkt = parseFloat(pktInput.value) || 0;
             piecesInput.value = pkt * 10;
@@ -1794,7 +1955,7 @@ class BindiMarketApp {
         const optR1 = document.getElementById('outward-opt-r1')?.checked;
         const optR2 = document.getElementById('outward-opt-r2')?.checked;
         const optR3 = document.getElementById('outward-opt-r3')?.checked;
-        
+
         document.querySelectorAll('.outward-item-row').forEach(row => {
             const select = row.querySelector('.outward-prod-select');
             const pId = parseInt(select.value);
@@ -1805,9 +1966,9 @@ class BindiMarketApp {
                     if (optR1 && prod.r1_rate) price = prod.r1_rate;
                     else if (optR2 && prod.r2_rate) price = prod.r2_rate;
                     else if (optR3 && prod.r3_rate) price = prod.r3_rate;
-                    
+
                     row.querySelector('.outward-price').value = price;
-                    
+
                     // Recalculate row total
                     const pieces = parseFloat(row.querySelector('.outward-pieces').value) || 0;
                     const total = pieces * price;
@@ -1955,7 +2116,7 @@ class BindiMarketApp {
         const tbody = document.querySelector('#outward-report-table tbody');
         if (!tbody) return;
         tbody.innerHTML = '';
-        
+
         let totalPkts = 0;
         let totalPieces = 0;
         let grandTotalSum = 0;
@@ -2033,7 +2194,7 @@ class BindiMarketApp {
 
     printOutwardDocument(tx) {
         const printArea = document.getElementById('invoice-print-area');
-        
+
         let itemsHTML = '';
         tx.items.forEach((item, idx) => {
             const prod = this.db.products.find(p => p.id === item.product_id);
@@ -2195,12 +2356,184 @@ class BindiMarketApp {
                     y: {
                         beginAtZero: true,
                         ticks: {
-                            callback: function(value) { return '₹' + value; }
+                            callback: function (value) { return '₹' + value; }
                         }
                     }
                 }
             }
         });
+    }
+
+    // ==========================================
+    // STITCHING MODULE
+    // ==========================================
+    setupAutocomplete(inputId, resultsId, dataFetcher) {
+        const input = document.getElementById(inputId);
+        const results = document.getElementById(resultsId);
+        if (!input || !results) return;
+
+        const showResults = () => {
+            const query = input.value.toLowerCase().trim();
+            const list = dataFetcher();
+            
+            // Filter options based on query
+            const matches = list.filter(item => (item || '').toLowerCase().includes(query));
+            
+            if (matches.length === 0) {
+                results.innerHTML = '';
+                results.style.display = 'none';
+                return;
+            }
+
+            results.innerHTML = '';
+            matches.slice(0, 10).forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'search-results-item';
+                div.innerHTML = `<strong>${item}</strong>`;
+                div.addEventListener('click', () => {
+                    input.value = item;
+                    results.innerHTML = '';
+                    results.style.display = 'none';
+                    // Trigger input and change events to update calculations
+                    input.dispatchEvent(new Event('input'));
+                    input.dispatchEvent(new Event('change'));
+                });
+                results.appendChild(div);
+            });
+            results.style.display = 'block';
+        };
+
+        input.addEventListener('input', showResults);
+        input.addEventListener('focus', showResults);
+
+        // Close dropdown on click outside
+        document.addEventListener('click', (e) => {
+            if (!input.contains(e.target) && !results.contains(e.target)) {
+                results.style.display = 'none';
+            }
+        });
+    }
+
+    resetStitchingForm() {
+        const form = document.getElementById('stitching-form');
+        if (form) form.reset();
+        const idInput = document.getElementById('stitch-id');
+        if (idInput) idInput.value = '';
+        const totalInput = document.getElementById('stitch-total');
+        if (totalInput) totalInput.value = '0.00';
+    }
+
+    handleStitchingSubmit(e) {
+        e.preventDefault();
+        const id = document.getElementById('stitch-id').value;
+        const item_name = document.getElementById('stitch-item-name').value.trim();
+        const bindi_bharti = document.getElementById('stitch-bindi-bharti').value.trim();
+        const size = document.getElementById('stitch-size').value.trim();
+        const color = document.getElementById('stitch-color').value.trim();
+        const avg = parseFloat(document.getElementById('stitch-avg').value) || 0;
+        const sheet_cost = parseFloat(document.getElementById('stitch-sheet-cost').value) || 0;
+        const total = parseFloat((avg * sheet_cost).toFixed(2));
+
+        if (id) {
+            const idx = this.db.stitching.findIndex(s => s.id === id || s.id === parseInt(id));
+            if (idx !== -1) {
+                this.db.stitching[idx] = {
+                    ...this.db.stitching[idx],
+                    item_name,
+                    bindi_bharti,
+                    size,
+                    color,
+                    avg,
+                    sheet_cost,
+                    total,
+                    entry_by: "Heet Punamiya"
+                };
+            }
+        } else {
+            const newId = Date.now();
+            this.db.stitching.push({
+                id: newId,
+                item_name,
+                bindi_bharti,
+                size,
+                color,
+                avg,
+                sheet_cost,
+                total,
+                date: new Date().toISOString(),
+                entry_by: "Heet Punamiya"
+            });
+        }
+
+        this.saveDB('stitching');
+        alert("Stitching record saved successfully!");
+        this.resetStitchingForm();
+        this.switchTab('stitching-report');
+    }
+
+    renderStitchingReport() {
+        const tbody = document.querySelector('#stitching-report-table tbody');
+        if (!tbody) return;
+        
+        tbody.innerHTML = '';
+        const searchInput = document.getElementById('stitch-report-search');
+        const search = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+        const filtered = this.db.stitching.filter(s =>
+            (s.item_name || '').toLowerCase().includes(search) ||
+            (s.bindi_bharti || '').toLowerCase().includes(search) ||
+            (s.size || '').toLowerCase().includes(search) ||
+            (s.color || '').toLowerCase().includes(search)
+        );
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted">No stitching entries found</td></tr>`;
+            return;
+        }
+
+        filtered.forEach(s => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${s.id}</td>
+                    <td><strong>${s.item_name}</strong></td>
+                    <td>${s.bindi_bharti}</td>
+                    <td><span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">${s.size}</span></td>
+                    <td><span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">${s.color}</span></td>
+                    <td>${s.avg}</td>
+                    <td>₹${s.sheet_cost.toFixed(2)}</td>
+                    <td><strong style="color: var(--primary-color);">₹${s.total.toFixed(2)}</strong></td>
+                    <td>
+                        <div class="action-btns">
+                            <button class="btn btn-primary btn-sm" onclick="app.editStitching(${s.id})"><i class="fa-solid fa-edit"></i></button>
+                            <button class="btn btn-secondary btn-sm" onclick="app.deleteStitching(${s.id})"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    editStitching(id) {
+        const s = this.db.stitching.find(x => x.id === id || x.id === parseInt(id));
+        if (!s) return;
+
+        this.switchTab('add-stitching');
+
+        document.getElementById('stitch-id').value = s.id;
+        document.getElementById('stitch-item-name').value = s.item_name || '';
+        document.getElementById('stitch-bindi-bharti').value = s.bindi_bharti || '';
+        document.getElementById('stitch-size').value = s.size || '';
+        document.getElementById('stitch-color').value = s.color || '';
+        document.getElementById('stitch-avg').value = s.avg || 0;
+        document.getElementById('stitch-sheet-cost').value = s.sheet_cost || 0;
+        document.getElementById('stitch-total').value = (s.total || 0).toFixed(2);
+    }
+
+    deleteStitching(id) {
+        if (!confirm("Are you sure you want to delete this stitching record?")) return;
+        this.db.stitching = this.db.stitching.filter(s => s.id !== id && s.id !== parseInt(id));
+        this.saveDB('stitching');
+        this.renderStitchingReport();
     }
 }
 
