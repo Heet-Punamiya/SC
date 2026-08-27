@@ -180,7 +180,12 @@ class BindiMarketApp {
                     if (changed) {
                         console.log("Database updated from server sync.");
                         this.updateGlobalCounters();
-                        this.renderTabSpecificData(this.currentTab);
+                        // Do not automatically trigger tab rendering for active entry/form tabs
+                        // as it would reset form fields and clear search states while the user is typing/editing.
+                        const formTabs = ['add-part', 'add-product', 'add-combo', 'add-inward', 'add-outward', 'add-stitching', 'labor-lot-wise'];
+                        if (!formTabs.includes(this.currentTab)) {
+                            this.renderTabSpecificData(this.currentTab);
+                        }
                     }
                 }
             } catch (err) {
