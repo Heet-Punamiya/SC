@@ -3292,10 +3292,10 @@ class BindiMarketApp {
         if (!this.db.labours) this.db.labours = [];
         if (!this.db.stitching) this.db.stitching = [];
 
-        const tbody = document.querySelector('#labor-assignment-report-table tbody');
-        if (!tbody) return;
+        const container = document.querySelector('#labor-assignment-report-container');
+        if (!container) return;
 
-        tbody.innerHTML = '';
+        container.innerHTML = '';
         
         // Filter stitching entries that have either assignments or legacy labour_no
         const assigned = this.db.stitching.filter(s => 
@@ -3303,12 +3303,10 @@ class BindiMarketApp {
         );
 
         if (assigned.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="12" style="text-align: center; color: var(--text-muted); padding: 20px;">
-                        No lot assignments found. Set assignments under the "Lot Wise" tab.
-                    </td>
-                </tr>
+            container.innerHTML = `
+                <div style="text-align: center; color: var(--text-muted); padding: 40px; border: 1px dashed #e2e8f0; border-radius: 8px; background-color: #fafafa;">
+                    No lot assignments found. Set assignments under the "Lot Wise" tab.
+                </div>
             `;
             return;
         }
@@ -3364,18 +3362,31 @@ class BindiMarketApp {
         });
 
         if (rowsToRender.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="12" style="text-align: center; color: var(--text-muted); padding: 20px;">
-                        No lot assignments found. Set assignments under the "Lot Wise" tab.
-                    </td>
-                </tr>
+            container.innerHTML = `
+                <div style="text-align: center; color: var(--text-muted); padding: 40px; border: 1px dashed #e2e8f0; border-radius: 8px; background-color: #fafafa;">
+                    No lot assignments found. Set assignments under the "Lot Wise" tab.
+                </div>
             `;
             return;
         }
 
-        // Sort rowsToRender by labour_no so all sheets taken by same labour are grouped together
-        rowsToRender.sort((a, b) => {
+        // Group by labour_no
+        const groups = {};
+        rowsToRender.forEach(row => {
+            if (!groups[row.labour_no]) {
+                groups[row.labour_no] = {
+                    labour_no: row.labour_no,
+                    labour_name: row.labour_name,
+                    items: [],
+                    totalGiven: 0
+                };
+            }
+            groups[row.labour_no].items.push(row);
+            groups[row.labour_no].totalGiven += parseFloat(row.sheet_given) || 0;
+        });
+
+        // Sort groups by labour number (numeric suffix sorting)
+        const sortedGroups = Object.values(groups).sort((a, b) => {
             const numA = parseInt((a.labour_no || '').replace(/\D/g, '')) || 0;
             const numB = parseInt((b.labour_no || '').replace(/\D/g, '')) || 0;
             if (numA !== numB) {
@@ -3384,35 +3395,71 @@ class BindiMarketApp {
             return (a.labour_no || '').localeCompare(b.labour_no || '');
         });
 
-        rowsToRender.forEach(row => {
-            tbody.innerHTML += `
-                <tr>
-                    <td>${row.date}</td>
-                    <td><strong>${row.lot_no}</strong></td>
-                    <td><strong>${row.labour_no}</strong></td>
-                    <td>${row.labour_name}</td>
-                    <td><strong>${row.item_name}</strong></td>
-                    <td>${row.bindi_bharti}</td>
-                    <td>
-                        <span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">
-                            ${row.color}
-                        </span>
-                    </td>
-                    <td>${row.totalSheets}</td>
-                    <td>${row.sheet_given}</td>
-                    <td>${row.remaining.toFixed(2)}</td>
-                    <td>${row.statusBadge}</td>
-                    <td style="text-align: center;">
-                        <button type="button" class="btn btn-sm btn-danger btn-delete-assignment" data-stitch-id="${row.stitchId}" data-asg-index="${row.asgIndex}" style="padding: 4px 8px; font-size: 0.85rem;">
-                            <i class="fa-solid fa-trash"></i> Delete
-                        </button>
-                    </td>
-                </tr>
+        sortedGroups.forEach(group => {
+            let tableRowsHtml = '';
+            group.items.forEach(row => {
+                tableRowsHtml += `
+                    <tr>
+                        <td>${row.date}</td>
+                        <td><strong>${row.lot_no}</strong></td>
+                        <td><strong>${row.item_name}</strong></td>
+                        <td>${row.bindi_bharti}</td>
+                        <td>
+                            <span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">
+                                ${row.color}
+                            </span>
+                        </td>
+                        <td>${row.totalSheets}</td>
+                        <td><strong>${row.sheet_given}</strong></td>
+                        <td>${row.remaining.toFixed(2)}</td>
+                        <td>${row.statusBadge}</td>
+                        <td style="text-align: center;">
+                            <button type="button" class="btn btn-sm btn-danger btn-delete-assignment" data-stitch-id="${row.stitchId}" data-asg-index="${row.asgIndex}" style="padding: 4px 8px; font-size: 0.85rem;">
+                                <i class="fa-solid fa-trash"></i> Delete
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            container.innerHTML += `
+                <div class="card mb-4" style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 24px;">
+                    <div class="card-header" style="background: linear-gradient(135deg, #058882 0%, #0369a1 100%); color: white; padding: 14px 20px; font-weight: 700; font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <div>
+                            <span style="background-color: rgba(255,255,255,0.25); padding: 4px 10px; border-radius: 6px; margin-right: 12px; font-weight: 800; font-size: 0.95rem; border: 1px solid rgba(255,255,255,0.15);">${group.labour_no}</span>
+                            <span style="font-size: 1.15rem; letter-spacing: 0.5px;">${group.labour_name}</span>
+                        </div>
+                        <div style="font-size: 1rem; background-color: rgba(255,255,255,0.2); padding: 6px 14px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.25); font-weight: 600;">
+                            Total Sheets Assigned: <span style="font-size: 1.15rem; font-weight: 800; margin-left: 4px;">${group.totalGiven.toFixed(2)}</span>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0" style="margin-bottom: 0;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Lot No</th>
+                                    <th>Product Name</th>
+                                    <th>Bharti</th>
+                                    <th>Color</th>
+                                    <th>Total Lot Sheets</th>
+                                    <th>Sheets Assigned</th>
+                                    <th>Remaining Lot Sheets</th>
+                                    <th>Status</th>
+                                    <th style="width: 100px; text-align: center;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRowsHtml}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             `;
         });
 
         // Wire delete buttons
-        tbody.querySelectorAll('.btn-delete-assignment').forEach(btn => {
+        container.querySelectorAll('.btn-delete-assignment').forEach(btn => {
             btn.addEventListener('click', () => {
                 const stitchId = btn.getAttribute('data-stitch-id');
                 const asgIndex = parseInt(btn.getAttribute('data-asg-index'));
