@@ -3305,13 +3305,15 @@ class BindiMarketApp {
         if (assigned.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="11" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                    <td colspan="12" style="text-align: center; color: var(--text-muted); padding: 20px;">
                         No lot assignments found. Set assignments under the "Lot Wise" tab.
                     </td>
                 </tr>
             `;
             return;
         }
+
+        const rowsToRender = [];
 
         assigned.forEach(s => {
             const formattedDate = s.date ? new Date(s.date).toLocaleDateString('en-GB') : 'N/A';
@@ -3337,33 +3339,125 @@ class BindiMarketApp {
                 ? `<span class="badge-status" style="background-color: #d1fae5; color: #065f46; font-weight: 700; padding: 4px 8px; border-radius: 4px;">Complete</span>`
                 : `<span class="badge-status" style="background-color: #fee2e2; color: #ef4444; font-weight: 700; padding: 4px 8px; border-radius: 4px;">Pending</span>`;
 
-            assignmentsToRender.forEach(asg => {
+            assignmentsToRender.forEach((asg, asgIndex) => {
                 if (!asg.labour_no) return; // Skip unassigned slots
                 
                 const lObj = this.db.labours.find(l => l.labour_no === asg.labour_no);
                 const name = lObj ? lObj.name : 'Unknown';
 
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${formattedDate}</td>
-                        <td><strong>${s.lot_no || 'N/A'}</strong></td>
-                        <td><strong>${asg.labour_no}</strong></td>
-                        <td>${name}</td>
-                        <td><strong>${s.item_name || 'N/A'}</strong></td>
-                        <td>${s.bindi_bharti || 'N/A'}</td>
-                        <td>
-                            <span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">
-                                ${s.color || 'N/A'}
-                            </span>
-                        </td>
-                        <td>${totalSheets}</td>
-                        <td>${asg.sheet_given || 0}</td>
-                        <td>${remaining.toFixed(2)}</td>
-                        <td>${statusBadge}</td>
-                    </tr>
-                `;
+                rowsToRender.push({
+                    stitchId: s.id,
+                    asgIndex: asgIndex,
+                    date: formattedDate,
+                    lot_no: s.lot_no || 'N/A',
+                    labour_no: asg.labour_no,
+                    labour_name: name,
+                    item_name: s.item_name || 'N/A',
+                    bindi_bharti: s.bindi_bharti || 'N/A',
+                    color: s.color || 'N/A',
+                    totalSheets: totalSheets,
+                    sheet_given: asg.sheet_given || 0,
+                    remaining: remaining,
+                    statusBadge: statusBadge
+                });
             });
         });
+
+        if (rowsToRender.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="12" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                        No lot assignments found. Set assignments under the "Lot Wise" tab.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        // Sort rowsToRender by labour_no so all sheets taken by same labour are grouped together
+        rowsToRender.sort((a, b) => {
+            const numA = parseInt((a.labour_no || '').replace(/\D/g, '')) || 0;
+            const numB = parseInt((b.labour_no || '').replace(/\D/g, '')) || 0;
+            if (numA !== numB) {
+                return numA - numB;
+            }
+            return (a.labour_no || '').localeCompare(b.labour_no || '');
+        });
+
+        rowsToRender.forEach(row => {
+            tbody.innerHTML += `
+                <tr>
+                    <td>${row.date}</td>
+                    <td><strong>${row.lot_no}</strong></td>
+                    <td><strong>${row.labour_no}</strong></td>
+                    <td>${row.labour_name}</td>
+                    <td><strong>${row.item_name}</strong></td>
+                    <td>${row.bindi_bharti}</td>
+                    <td>
+                        <span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">
+                            ${row.color}
+                        </span>
+                    </td>
+                    <td>${row.totalSheets}</td>
+                    <td>${row.sheet_given}</td>
+                    <td>${row.remaining.toFixed(2)}</td>
+                    <td>${row.statusBadge}</td>
+                    <td style="text-align: center;">
+                        <button type="button" class="btn btn-sm btn-danger btn-delete-assignment" data-stitch-id="${row.stitchId}" data-asg-index="${row.asgIndex}" style="padding: 4px 8px; font-size: 0.85rem;">
+                            <i class="fa-solid fa-trash"></i> Delete
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        // Wire delete buttons
+        tbody.querySelectorAll('.btn-delete-assignment').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const stitchId = btn.getAttribute('data-stitch-id');
+                const asgIndex = parseInt(btn.getAttribute('data-asg-index'));
+                this.deleteLaborAssignment(stitchId, asgIndex);
+            });
+        });
+    }
+
+    deleteLaborAssignment(stitchId, asgIndex) {
+        if (!confirm("Are you sure you want to delete this labour assignment?")) {
+            return;
+        }
+
+        const idx = this.db.stitching.findIndex(s => s.id === parseInt(stitchId) || s.id === stitchId);
+        if (idx !== -1) {
+            const s = this.db.stitching[idx];
+            // Ensure assignments is initialized first so we can splice it
+            if (!s.assignments) {
+                if (s.labour_no) {
+                    s.assignments = [{
+                        labour_no: s.labour_no,
+                        sheet_given: s.sheet_given || 0
+                    }];
+                } else {
+                    s.assignments = [];
+                }
+            }
+
+            if (s.assignments.length > 0) {
+                s.assignments.splice(asgIndex, 1);
+            }
+
+            // Sync legacy fields
+            if (s.assignments.length > 0) {
+                s.labour_no = s.assignments[0].labour_no;
+                s.sheet_given = s.assignments[0].sheet_given;
+            } else {
+                s.labour_no = '';
+                s.sheet_given = 0;
+            }
+
+            this.saveDB('stitching');
+            alert("Assignment deleted successfully.");
+            this.renderLaborAssignmentReport();
+        }
     }
 }
 
