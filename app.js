@@ -2889,7 +2889,6 @@ class BindiMarketApp {
         const reportArea = document.getElementById('labor-lot-report-area');
         const messageDiv = document.getElementById('labor-lot-message');
         const loadingDiv = document.getElementById('labor-lot-loading');
-        const tbody = document.querySelector('#labor-lot-table tbody');
 
         if (!lot_no) {
             alert("Please enter a Lot Number to search.");
@@ -2920,156 +2919,290 @@ class BindiMarketApp {
 
             if (!this.db.labours) this.db.labours = [];
 
-            // Populate table rows
-            if (tbody) {
-                tbody.innerHTML = '';
-                filtered.forEach(s => {
-                    const formattedDate = s.date ? new Date(s.date).toLocaleDateString('en-GB') : 'N/A';
-                    const totalSheets = s.sheet_cost || 0;
-                    const sheetGiven = s.sheet_given !== undefined ? s.sheet_given : 0;
-                    const remaining = totalSheets - sheetGiven;
-
-                    const remainingStyle = remaining > 0 
-                        ? 'background-color: #fee2e2; color: #ef4444;' 
-                        : 'background-color: #d1fae5; color: #065f46;';
-
-                    const labourOptions = this.db.labours.map(l => `
-                        <option value="${l.labour_no}" ${s.labour_no === l.labour_no ? 'selected' : ''}>
-                            ${l.labour_no}
-                        </option>
-                    `).join('');
-
-                    const labourObj = this.db.labours.find(l => l.labour_no === s.labour_no);
-                    const labourName = labourObj ? labourObj.name : '';
-
-                    tbody.innerHTML += `
-                        <tr>
-                            <td>
-                                <select class="form-control edit-dist-labour-no" data-id="${s.id}" style="width: 140px;" required>
-                                    <option value="">Select Labour</option>
-                                    ${labourOptions}
-                                </select>
-                            </td>
-                            <td class="edit-dist-labour-name" style="font-weight: 600;">${labourName}</td>
-                            <td>${formattedDate}</td>
-                            <td><strong>${s.item_name || 'N/A'}</strong></td>
-                            <td>${s.bindi_bharti || 'N/A'}</td>
-                            <td>
-                                <span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">
-                                    ${s.color || 'N/A'}
-                                </span>
-                            </td>
-                            <td>${totalSheets}</td>
-                            <td>${s.avg || 0}</td>
-                            <td><strong>${s.total || 0}</strong></td>
-                            <td>
-                                <input type="number" class="form-control edit-dist-sheet-given" data-id="${s.id}" data-total-sheets="${totalSheets}" value="${s.sheet_given !== undefined ? s.sheet_given : ''}" style="width: 120px;" step="0.01" min="0" required placeholder="0.00">
-                            </td>
-                            <td>
-                                <span class="remaining-badge-${s.id} badge-status" style="${remainingStyle} font-weight: 700; padding: 6px 12px; border-radius: 4px; display: inline-block;">
-                                    ${remaining.toFixed(2)}
-                                </span>
-                            </td>
-                        </tr>
-                    `;
-                });
-
-                // Attach select change listener to update labour name column
-                tbody.querySelectorAll('.edit-dist-labour-no').forEach(select => {
-                    select.addEventListener('change', () => {
-                        const selectedVal = select.value;
-                        const lObj = this.db.labours.find(l => l.labour_no === selectedVal);
-                        const nameCell = select.closest('tr').querySelector('.edit-dist-labour-name');
-                        if (nameCell) {
-                            nameCell.innerText = lObj ? lObj.name : '';
-                        }
-                    });
-                });
-
-                // Attach dynamic update listeners to "Sheet Given" inputs
-                tbody.querySelectorAll('.edit-dist-sheet-given').forEach(input => {
-                    input.addEventListener('input', () => {
-                        const id = input.getAttribute('data-id');
-                        const total = parseFloat(input.getAttribute('data-total-sheets')) || 0;
-                        const given = parseFloat(input.value) || 0;
-                        const rem = total - given;
-
-                        const badge = tbody.querySelector(`.remaining-badge-${id}`);
-                        if (badge) {
-                            badge.innerText = rem.toFixed(2);
-                            if (rem > 0) {
-                                badge.style.backgroundColor = '#fee2e2';
-                                badge.style.color = '#ef4444';
-                            } else {
-                                badge.style.backgroundColor = '#d1fae5';
-                                badge.style.color = '#065f46';
-                            }
-                        }
-                    });
-                });
-            }
+            this.renderLaborLotTable(filtered);
 
             if (reportArea) reportArea.style.display = 'block';
         }, 500);
     }
 
+    renderLaborLotTable(filtered) {
+        const tbody = document.querySelector('#labor-lot-table tbody');
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+        filtered.forEach(s => {
+            const formattedDate = s.date ? new Date(s.date).toLocaleDateString('en-GB') : 'N/A';
+            const totalSheets = s.sheet_cost || 0;
+
+            // Ensure s.assignments is resolved
+            if (!s.assignments) {
+                if (s.labour_no) {
+                    s.assignments = [{
+                        labour_no: s.labour_no,
+                        sheet_given: s.sheet_given !== undefined ? s.sheet_given : 0
+                    }];
+                } else {
+                    s.assignments = [{
+                        labour_no: '',
+                        sheet_given: 0
+                    }];
+                }
+            } else if (s.assignments.length === 0) {
+                s.assignments = [{
+                    labour_no: '',
+                    sheet_given: 0
+                }];
+            }
+
+            const totalGiven = s.assignments.reduce((sum, a) => sum + (parseFloat(a.sheet_given) || 0), 0);
+            const remaining = totalSheets - totalGiven;
+
+            s.assignments.forEach((asg, asgIndex) => {
+                const remainingStyle = remaining > 0 
+                    ? 'background-color: #fee2e2; color: #ef4444;' 
+                    : 'background-color: #d1fae5; color: #065f46;';
+
+                const labourOptions = this.db.labours.map(l => `
+                    <option value="${l.labour_no}" ${asg.labour_no === l.labour_no ? 'selected' : ''}>
+                        ${l.labour_no}
+                    </option>
+                `).join('');
+
+                const labourObj = this.db.labours.find(l => l.labour_no === asg.labour_no);
+                const labourName = labourObj ? labourObj.name : '';
+
+                const actionBtn = asgIndex === 0 
+                    ? `<button type="button" class="btn btn-sm btn-success btn-add-assignment" data-id="${s.id}" style="padding: 4px 8px; font-size: 0.85rem;"><i class="fa-solid fa-plus"></i> Add Labour</button>`
+                    : `<button type="button" class="btn btn-sm btn-danger btn-remove-assignment" data-id="${s.id}" data-index="${asgIndex}" style="padding: 4px 8px; font-size: 0.85rem;"><i class="fa-solid fa-trash"></i></button>`;
+
+                tbody.innerHTML += `
+                    <tr class="stitch-row-group-${s.id}" data-stitch-id="${s.id}">
+                        <td>
+                            <select class="form-control edit-dist-labour-no" data-id="${s.id}" data-index="${asgIndex}" style="width: 140px;" required>
+                                <option value="">Select Labour</option>
+                                ${labourOptions}
+                            </select>
+                        </td>
+                        <td class="edit-dist-labour-name" style="font-weight: 600;">${labourName}</td>
+                        <td>${formattedDate}</td>
+                        <td><strong>${s.item_name || 'N/A'}</strong></td>
+                        <td>${s.bindi_bharti || 'N/A'}</td>
+                        <td>
+                            <span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">
+                                ${s.color || 'N/A'}
+                            </span>
+                        </td>
+                        <td>${totalSheets}</td>
+                        <td>${s.avg || 0}</td>
+                        <td><strong>${s.total || 0}</strong></td>
+                        <td>
+                            <input type="number" class="form-control edit-dist-sheet-given" data-id="${s.id}" data-index="${asgIndex}" data-total-sheets="${totalSheets}" value="${asg.sheet_given !== undefined && asg.sheet_given !== 0 ? asg.sheet_given : ''}" style="width: 120px;" step="0.01" min="0" required placeholder="0.00">
+                        </td>
+                        <td>
+                            <span class="remaining-badge-${s.id} badge-status" style="${remainingStyle} font-weight: 700; padding: 6px 12px; border-radius: 4px; display: inline-block;">
+                                ${remaining.toFixed(2)}
+                            </span>
+                        </td>
+                        <td style="text-align: center;">
+                            ${actionBtn}
+                        </td>
+                    </tr>
+                `;
+            });
+        });
+
+        // Attach select change listener to update labour name column
+        tbody.querySelectorAll('.edit-dist-labour-no').forEach(select => {
+            select.addEventListener('change', () => {
+                const selectedVal = select.value;
+                const lObj = this.db.labours.find(l => l.labour_no === selectedVal);
+                const nameCell = select.closest('tr').querySelector('.edit-dist-labour-name');
+                if (nameCell) {
+                    nameCell.innerText = lObj ? lObj.name : '';
+                }
+            });
+        });
+
+        // Attach dynamic update listeners to "Sheet Given" inputs
+        tbody.querySelectorAll('.edit-dist-sheet-given').forEach(input => {
+            input.addEventListener('input', () => {
+                const id = input.getAttribute('data-id');
+                const total = parseFloat(input.getAttribute('data-total-sheets')) || 0;
+                
+                // Sum all sheet_given inputs for this stitching ID in the DOM
+                let sum = 0;
+                tbody.querySelectorAll(`.edit-dist-sheet-given[data-id="${id}"]`).forEach(inp => {
+                    sum += parseFloat(inp.value) || 0;
+                });
+                
+                const rem = total - sum;
+
+                tbody.querySelectorAll(`.remaining-badge-${id}`).forEach(badge => {
+                    badge.innerText = rem.toFixed(2);
+                    if (rem > 0) {
+                        badge.style.backgroundColor = '#fee2e2';
+                        badge.style.color = '#ef4444';
+                    } else {
+                        badge.style.backgroundColor = '#d1fae5';
+                        badge.style.color = '#065f46';
+                    }
+                });
+            });
+        });
+
+        // Attach event listeners for Add Labour button
+        tbody.querySelectorAll('.btn-add-assignment').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-id');
+                this.syncLaborInputsToMemory();
+                
+                const idx = this.db.stitching.findIndex(s => s.id === parseInt(id) || s.id === id);
+                if (idx !== -1) {
+                    if (!this.db.stitching[idx].assignments) {
+                        this.db.stitching[idx].assignments = [];
+                    }
+                    this.db.stitching[idx].assignments.push({ labour_no: '', sheet_given: 0 });
+                    
+                    // Re-render
+                    const lotInput = document.getElementById('labor-search-lot');
+                    const lot_no = lotInput ? lotInput.value.trim() : '';
+                    const filtered = this.db.stitching.filter(s => 
+                        (s.lot_no || '').toLowerCase() === lot_no.toLowerCase()
+                    );
+                    this.renderLaborLotTable(filtered);
+                }
+            });
+        });
+
+        // Attach event listeners for Remove Labour button
+        tbody.querySelectorAll('.btn-remove-assignment').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-id');
+                const index = parseInt(btn.getAttribute('data-index'));
+                this.syncLaborInputsToMemory();
+
+                const idx = this.db.stitching.findIndex(s => s.id === parseInt(id) || s.id === id);
+                if (idx !== -1 && this.db.stitching[idx].assignments) {
+                    this.db.stitching[idx].assignments.splice(index, 1);
+                    
+                    // Re-render
+                    const lotInput = document.getElementById('labor-search-lot');
+                    const lot_no = lotInput ? lotInput.value.trim() : '';
+                    const filtered = this.db.stitching.filter(s => 
+                        (s.lot_no || '').toLowerCase() === lot_no.toLowerCase()
+                    );
+                    this.renderLaborLotTable(filtered);
+                }
+            });
+        });
+    }
+
+    syncLaborInputsToMemory() {
+        const rows = document.querySelectorAll('#labor-lot-table tbody tr');
+        const tempAssignments = {};
+
+        rows.forEach(row => {
+            const stitchId = row.getAttribute('data-stitch-id');
+            if (!stitchId) return;
+
+            const labourSelect = row.querySelector('.edit-dist-labour-no');
+            const sheetGivenInput = row.querySelector('.edit-dist-sheet-given');
+
+            if (labourSelect && sheetGivenInput) {
+                const labourNo = labourSelect.value;
+                const sheetGivenVal = parseFloat(sheetGivenInput.value) || 0;
+
+                if (!tempAssignments[stitchId]) {
+                    tempAssignments[stitchId] = [];
+                }
+                tempAssignments[stitchId].push({
+                    labour_no: labourNo,
+                    sheet_given: sheetGivenVal
+                });
+            }
+        });
+
+        // Write back to this.db.stitching
+        for (const stitchId in tempAssignments) {
+            const idx = this.db.stitching.findIndex(s => s.id === parseInt(stitchId) || s.id === stitchId);
+            if (idx !== -1) {
+                this.db.stitching[idx].assignments = tempAssignments[stitchId];
+                // For backward compatibility
+                if (tempAssignments[stitchId].length > 0) {
+                    this.db.stitching[idx].labour_no = tempAssignments[stitchId][0].labour_no;
+                    this.db.stitching[idx].sheet_given = tempAssignments[stitchId][0].sheet_given;
+                } else {
+                    this.db.stitching[idx].labour_no = '';
+                    this.db.stitching[idx].sheet_given = 0;
+                }
+            }
+        }
+    }
+
     saveLaborDistribution() {
-        const labourSelects = document.querySelectorAll('.edit-dist-labour-no');
-        const sheetGivenInputs = document.querySelectorAll('.edit-dist-sheet-given');
+        this.syncLaborInputsToMemory();
 
         let hasValidationErrors = false;
-        const updates = [];
+        const lotInput = document.getElementById('labor-search-lot');
+        const lot_no = lotInput ? lotInput.value.trim() : '';
 
-        labourSelects.forEach((labourSelect, index) => {
-            const sheetGivenInput = sheetGivenInputs[index];
-            const id = labourSelect.getAttribute('data-id');
+        if (!lot_no) {
+            alert("No lot number active.");
+            return;
+        }
 
-            const labourNo = labourSelect.value;
-            const totalSheets = parseFloat(sheetGivenInput.getAttribute('data-total-sheets')) || 0;
-            const sheetGivenVal = parseFloat(sheetGivenInput.value);
+        // Get stitching records for the current lot
+        const lotStitchings = this.db.stitching.filter(s =>
+            (s.lot_no || '').toLowerCase() === lot_no.toLowerCase()
+        );
 
-            if (!labourNo) {
-                alert(`Row ${index + 1}: Please select a Labour Worker.`);
+        // Validate each stitching record's assignments
+        for (let i = 0; i < lotStitchings.length; i++) {
+            const s = lotStitchings[i];
+            const totalSheets = s.sheet_cost || 0;
+            let sumGiven = 0;
+
+            if (!s.assignments || s.assignments.length === 0) {
+                alert(`Product "${s.item_name}": Please assign at least one Labour Worker.`);
                 hasValidationErrors = true;
-                return;
+                break;
             }
 
-            if (isNaN(sheetGivenVal) || sheetGivenVal < 0) {
-                alert(`Row ${index + 1}: Sheet Given must be a valid non-negative number.`);
-                hasValidationErrors = true;
-                return;
+            for (let j = 0; j < s.assignments.length; j++) {
+                const asg = s.assignments[j];
+                if (!asg.labour_no) {
+                    alert(`Product "${s.item_name}", Assignment ${j + 1}: Please select a Labour Worker.`);
+                    hasValidationErrors = true;
+                    break;
+                }
+                const given = parseFloat(asg.sheet_given) || 0;
+                if (given < 0) {
+                    alert(`Product "${s.item_name}", Assignment ${j + 1}: Sheet Given must be a valid non-negative number.`);
+                    hasValidationErrors = true;
+                    break;
+                }
+                sumGiven += given;
             }
 
-            if (sheetGivenVal > totalSheets) {
-                alert(`Row ${index + 1}: Sheet Given (${sheetGivenVal}) cannot exceed Total Sheets (${totalSheets}).`);
-                hasValidationErrors = true;
-                return;
-            }
+            if (hasValidationErrors) break;
 
-            updates.push({ id, labourNo, sheetGivenVal });
-        });
+            if (parseFloat(sumGiven.toFixed(2)) > parseFloat(totalSheets.toFixed(2))) {
+                alert(`Product "${s.item_name}": Total Sheet Given (${sumGiven.toFixed(2)}) cannot exceed Total Sheets (${totalSheets.toFixed(2)}).`);
+                hasValidationErrors = true;
+                break;
+            }
+        }
 
         if (hasValidationErrors) return;
 
-        // Perform updates on the DB
-        let updateCount = 0;
-        updates.forEach(up => {
-            const idx = this.db.stitching.findIndex(s => s.id === up.id || s.id === parseInt(up.id));
-            if (idx !== -1) {
-                this.db.stitching[idx].labour_no = up.labourNo;
-                this.db.stitching[idx].sheet_given = up.sheetGivenVal;
-                updateCount++;
-            }
-        });
-
-        if (updateCount > 0) {
-            this.saveDB('stitching');
-            alert("Labor distribution details saved successfully!");
-            // Refresh table
-            this.searchLaborLot();
-        } else {
-            alert("No matching stitching records found to update.");
-        }
+        this.saveDB('stitching');
+        alert("Labor distribution details saved successfully!");
+        
+        // Refresh table
+        const filtered = this.db.stitching.filter(s => 
+            (s.lot_no || '').toLowerCase() === lot_no.toLowerCase()
+        );
+        this.renderLaborLotTable(filtered);
     }
 
     // ==========================================
@@ -3158,7 +3291,11 @@ class BindiMarketApp {
         if (!tbody) return;
 
         tbody.innerHTML = '';
-        const assigned = this.db.stitching.filter(s => s.labour_no);
+        
+        // Filter stitching entries that have either assignments or legacy labour_no
+        const assigned = this.db.stitching.filter(s => 
+            (s.assignments && s.assignments.length > 0) || s.labour_no
+        );
 
         if (assigned.length === 0) {
             tbody.innerHTML = `
@@ -3174,35 +3311,53 @@ class BindiMarketApp {
         assigned.forEach(s => {
             const formattedDate = s.date ? new Date(s.date).toLocaleDateString('en-GB') : 'N/A';
             const totalSheets = s.sheet_cost || 0;
-            const sheetGiven = s.sheet_given || 0;
-            const remaining = totalSheets - sheetGiven;
+
+            // Determine assignments to render
+            let assignmentsToRender = s.assignments;
+            if (!assignmentsToRender || assignmentsToRender.length === 0) {
+                if (s.labour_no) {
+                    assignmentsToRender = [{
+                        labour_no: s.labour_no,
+                        sheet_given: s.sheet_given || 0
+                    }];
+                } else {
+                    assignmentsToRender = [];
+                }
+            }
+
+            const totalGiven = assignmentsToRender.reduce((sum, a) => sum + (parseFloat(a.sheet_given) || 0), 0);
+            const remaining = totalSheets - totalGiven;
             
-            const statusBadge = remaining === 0 
+            const statusBadge = remaining <= 0 
                 ? `<span class="badge-status" style="background-color: #d1fae5; color: #065f46; font-weight: 700; padding: 4px 8px; border-radius: 4px;">Complete</span>`
                 : `<span class="badge-status" style="background-color: #fee2e2; color: #ef4444; font-weight: 700; padding: 4px 8px; border-radius: 4px;">Pending</span>`;
 
-            const lObj = this.db.labours.find(l => l.labour_no === s.labour_no);
-            const name = lObj ? lObj.name : 'Unknown';
+            assignmentsToRender.forEach(asg => {
+                if (!asg.labour_no) return; // Skip unassigned slots
+                
+                const lObj = this.db.labours.find(l => l.labour_no === asg.labour_no);
+                const name = lObj ? lObj.name : 'Unknown';
 
-            tbody.innerHTML += `
-                <tr>
-                    <td>${formattedDate}</td>
-                    <td><strong>${s.lot_no || 'N/A'}</strong></td>
-                    <td><strong>${s.labour_no}</strong></td>
-                    <td>${name}</td>
-                    <td><strong>${s.item_name || 'N/A'}</strong></td>
-                    <td>${s.bindi_bharti || 'N/A'}</td>
-                    <td>
-                        <span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">
-                            ${s.color || 'N/A'}
-                        </span>
-                    </td>
-                    <td>${totalSheets}</td>
-                    <td>${sheetGiven}</td>
-                    <td>${remaining.toFixed(2)}</td>
-                    <td>${statusBadge}</td>
-                </tr>
-            `;
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${formattedDate}</td>
+                        <td><strong>${s.lot_no || 'N/A'}</strong></td>
+                        <td><strong>${asg.labour_no}</strong></td>
+                        <td>${name}</td>
+                        <td><strong>${s.item_name || 'N/A'}</strong></td>
+                        <td>${s.bindi_bharti || 'N/A'}</td>
+                        <td>
+                            <span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">
+                                ${s.color || 'N/A'}
+                            </span>
+                        </td>
+                        <td>${totalSheets}</td>
+                        <td>${asg.sheet_given || 0}</td>
+                        <td>${remaining.toFixed(2)}</td>
+                        <td>${statusBadge}</td>
+                    </tr>
+                `;
+            });
         });
     }
 }
