@@ -159,6 +159,29 @@
             display: flex;
             gap: 6px;
         }
+
+        /* Stitching Grid layout */
+        .stitching-grid-header {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1.2fr 1.2fr 1fr 1fr 1.2fr 45px;
+            gap: 12px;
+            font-weight: 600;
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 12px;
+        }
+
+        .stitching-grid-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1.2fr 1.2fr 1fr 1fr 1.2fr 45px;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 10px;
+            position: relative;
+        }
     </style>
 </head>
 
@@ -275,6 +298,11 @@
                                 Outward Report</a></li>
                     </ul>
 
+                    <!-- 4.8 LABOUR MASTER -->
+                    <li class="nav-item" data-tab="labour-master">
+                        <a href="#labour-master"><i class="fa-solid fa-user-tie"></i> Labour Master</a>
+                    </li>
+
                     <!-- 5. STITCHING COLLAPSIBLE -->
                     <li class="nav-item nav-item-toggle" data-submenu="submenu-stitching">
                         <a href="#stitching"><i class="fa-solid fa-scissors"></i> Stitching</a>
@@ -285,6 +313,17 @@
                                 Stitching</a></li>
                         <li data-tab="stitching-report"><a href="#stitching-report"><i class="fa-solid fa-receipt"></i>
                                 Stitching Report</a></li>
+                    </ul>
+
+                    <!-- 6. LABOR DISTRIBUTION COLLAPSIBLE -->
+                    <li class="nav-item nav-item-toggle" data-submenu="submenu-labor">
+                        <a href="#labor"><i class="fa-solid fa-people-carry-box"></i> Labor Distribution</a>
+                        <i class="fa-solid fa-chevron-right arrow" style="margin-right: 20px;"></i>
+                    </li>
+                    <ul class="nav-submenu" id="submenu-labor">
+                        <li data-tab="labor-lot-wise"><a href="#labor-lot-wise"><i class="fa-solid fa-boxes-packing"></i> Lot Wise</a></li>
+                        <li data-tab="labor-labor-wise"><a href="#labor-labor-wise"><i class="fa-solid fa-user-gear"></i> Labor Wise</a></li>
+                        <li data-tab="labor-assignment-report"><a href="#labor-assignment-report"><i class="fa-solid fa-file-invoice"></i> Assignment Report</a></li>
                     </ul>
                 </ul>
             </nav>
@@ -1314,61 +1353,36 @@
                         </div>
                         <div class="card-body">
                             <form id="stitching-form">
-                                <input type="hidden" id="stitch-id">
-                                
-                                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
-                                    <!-- Item Name Autocomplete -->
-                                    <div class="form-group" style="flex: 1; min-width: 200px; position: relative;">
-                                        <label for="stitch-item-name">Item Name *</label>
-                                        <input type="text" id="stitch-item-name" class="form-control" placeholder="Search or type item name..." autocomplete="off" required>
-                                        <div id="stitch-item-name-results" class="search-results-dropdown"></div>
-                                    </div>
-                                    
-                                    <!-- Bindi Bharti -->
-                                    <div class="form-group" style="flex: 1; min-width: 200px;">
-                                        <label for="stitch-bindi-bharti">Bindi Bharti *</label>
-                                        <input type="text" id="stitch-bindi-bharti" class="form-control" placeholder="Bharti count (e.g. 30)" required>
+                                <!-- Lot No Field -->
+                                <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                                    <div class="form-group" style="width: 250px; margin-bottom: 0;">
+                                        <label for="stitch-lot-no" style="font-weight: 600; display: block; margin-bottom: 6px;">Lot No *</label>
+                                        <input type="text" id="stitch-lot-no" class="form-control" placeholder="Enter Lot No (e.g. LOT-101)" required>
                                     </div>
                                 </div>
 
-                                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
-                                    <!-- Size Autocomplete -->
-                                    <div class="form-group" style="flex: 1; min-width: 200px; position: relative;">
-                                        <label for="stitch-size">Size *</label>
-                                        <input type="text" id="stitch-size" class="form-control" placeholder="Search size..." autocomplete="off" required>
-                                        <div id="stitch-size-results" class="search-results-dropdown"></div>
-                                    </div>
-                                    
-                                    <!-- Color Autocomplete -->
-                                    <div class="form-group" style="flex: 1; min-width: 200px; position: relative;">
-                                        <label for="stitch-color">Color *</label>
-                                        <input type="text" id="stitch-color" class="form-control" placeholder="Search color..." autocomplete="off" required>
-                                        <div id="stitch-color-results" class="search-results-dropdown"></div>
-                                    </div>
+                                <!-- Line items grid header -->
+                                <div class="stitching-grid-header">
+                                    <div>Item Name *</div>
+                                    <div>Bindi Bharti *</div>
+                                    <div>Size *</div>
+                                    <div>Color *</div>
+                                    <div>Avg *</div>
+                                    <div>Sheet *</div>
+                                    <div>Total</div>
+                                    <div></div>
                                 </div>
 
-                                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
-                                    <!-- Avg -->
-                                    <div class="form-group" style="flex: 1; min-width: 150px;">
-                                        <label for="stitch-avg">Average (Avg) *</label>
-                                        <input type="number" id="stitch-avg" class="form-control" placeholder="Average sheets" step="0.01" required>
-                                    </div>
-
-                                    <!-- Sheet Cost -->
-                                    <div class="form-group" style="flex: 1; min-width: 150px;">
-                                        <label for="stitch-sheet-cost">Sheet Cost *</label>
-                                        <input type="number" id="stitch-sheet-cost" class="form-control" placeholder="Cost per sheet" step="0.01" required>
-                                    </div>
-
-                                    <!-- Total (avg * sheet cost) -->
-                                    <div class="form-group" style="flex: 1; min-width: 150px;">
-                                        <label for="stitch-total">Total Cost (Avg × Sheet Cost)</label>
-                                        <input type="text" id="stitch-total" class="form-control" style="font-weight: 700; color: var(--primary-color);" readonly value="0.00">
-                                    </div>
+                                <!-- Dynamic rows wrapper -->
+                                <div id="stitching-rows-container">
+                                    <!-- JS appends rows here -->
                                 </div>
+
+                                <button type="button" class="btn btn-primary" id="btn-add-stitching-row"
+                                    style="margin-top: 10px;">+ More</button>
 
                                 <div style="display: flex; gap: 10px; margin-top: 25px;">
-                                    <button type="submit" class="btn btn-primary" id="btn-save-stitch">Save Stitching Entry</button>
+                                    <button type="submit" class="btn btn-primary" id="btn-save-stitch" style="background-color: #058882; border-color: #058882; padding: 10px 24px;">Save Stitching Entry</button>
                                     <button type="button" class="btn btn-secondary" onclick="app.switchTab('stitching-report')">View Report</button>
                                 </div>
                             </form>
@@ -1398,9 +1412,158 @@
                                             <th>Size</th>
                                             <th>Color</th>
                                             <th>Avg</th>
-                                            <th>Sheet Cost</th>
-                                            <th>Total Cost</th>
+                                            <th>Sheet</th>
+                                            <th>Total</th>
                                             <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Loaded dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 4.9 LABOUR MASTER -->
+                <section id="tab-labour-master" class="tab-pane">
+                    <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 25px;">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Add Labour</h3>
+                            </div>
+                            <div class="card-body">
+                                <form id="labour-form">
+                                    <div class="form-group">
+                                        <label for="labour-name">Labour Name *</label>
+                                        <input type="text" id="labour-name" class="form-control" required placeholder="Enter labour worker name">
+                                    </div>
+                                    <button type="submit" class="btn btn-primary" style="background-color: #058882; border-color: #058882;">Save Labour</button>
+                                </form>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Labour Directory</h3>
+                            </div>
+                            <div class="card-body">
+                                <table class="table" id="labour-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Labour No</th>
+                                            <th>Labour Name</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Loaded dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 6.1 LABOR DISTRIBUTION - LOT WISE -->
+                <section id="tab-labor-lot-wise" class="tab-pane">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Lot Wise Labor Distribution</h3>
+                        </div>
+                        <div class="card-body">
+                            <div style="display: flex; gap: 15px; margin-bottom: 20px; align-items: flex-end; flex-wrap: wrap;">
+                                <div class="form-group" style="width: 250px; margin-bottom: 0;">
+                                    <label for="labor-search-lot" style="font-weight: 600; display: block; margin-bottom: 6px;">Enter Lot Number *</label>
+                                    <input type="text" id="labor-search-lot" class="form-control" placeholder="e.g. LOT-101" required>
+                                </div>
+                                <button type="button" class="btn btn-primary" id="btn-search-labor-lot" style="background-color: #058882; border-color: #058882; padding: 10px 24px;">
+                                    <i class="fa-solid fa-magnifying-glass"></i> Search / View Report
+                                </button>
+                            </div>
+                            
+                            <!-- Loading indicator -->
+                            <div id="labor-lot-loading" style="display: none; padding: 20px; text-align: center; color: var(--text-muted);">
+                                <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 1.5rem; margin-right: 8px; color: #058882;"></i> Loading lot details...
+                            </div>
+
+                            <!-- Empty / Alert message -->
+                            <div id="labor-lot-message" class="alert alert-info" style="display: none; padding: 12px 18px; border-radius: 8px; margin-top: 15px;">
+                                <!-- dynamic message -->
+                            </div>
+
+                            <!-- Report table block -->
+                            <div id="labor-lot-report-area" style="display: none; margin-top: 25px;">
+                                <h4 style="margin-bottom: 15px; font-weight: 700; color: var(--dark-bg);">Lot Wise Stitching Report</h4>
+                                <div class="table-responsive">
+                                    <table class="table" id="labor-lot-table">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 140px;">Labour No *</th>
+                                                <th>Labour Name</th>
+                                                <th>Date</th>
+                                                <th>Bindi</th>
+                                                <th>Bharti</th>
+                                                <th>Color</th>
+                                                <th>Sheet</th>
+                                                <th>Avg</th>
+                                                <th>Total</th>
+                                                <th style="width: 130px;">Sheet Given *</th>
+                                                <th>Remaining</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Dynamically loaded rows -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                <div style="display: flex; gap: 10px; margin-top: 25px;">
+                                    <button type="button" class="btn btn-primary" id="btn-save-labor-dist" style="background-color: #058882; border-color: #058882; padding: 10px 24px;">
+                                        <i class="fa-solid fa-floppy-disk"></i> Save Distribution
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 6.2 LABOR DISTRIBUTION - LABOR WISE -->
+                <section id="tab-labor-labor-wise" class="tab-pane">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Labor Wise Distribution</h3>
+                        </div>
+                        <div class="card-body" style="padding: 30px; text-align: center; color: var(--text-muted);">
+                            <i class="fa-solid fa-helmet-safety" style="font-size: 3rem; color: #058882; margin-bottom: 15px;"></i>
+                            <h4>Labor Wise Distribution – Coming Soon</h4>
+                            <p>This module will allow managing labor distribution by individual labor worker in a future release.</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 6.3 LABOR DISTRIBUTION - ASSIGNMENT REPORT -->
+                <section id="tab-labor-assignment-report" class="tab-pane">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Labour Assignment Report</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table" id="labor-assignment-report-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Lot No</th>
+                                            <th>Labour No</th>
+                                            <th>Labour Name</th>
+                                            <th>Bindi</th>
+                                            <th>Bharti</th>
+                                            <th>Color</th>
+                                            <th>Sheet Total</th>
+                                            <th>Sheet Given</th>
+                                            <th>Remaining</th>
+                                            <th>Status</th>
                                         </tr>
                                     </thead>
                                     <tbody>

@@ -31,7 +31,8 @@ const initialDB = {
     combo_products: [],
     inwards: [],
     outwards: [],
-    stitching: []
+    stitching: [],
+    labours: []
 };
 
 // MongoDB setup variables

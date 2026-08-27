@@ -46,7 +46,7 @@ class BindiMarketApp {
     async loadDB() {
         const listKeys = [
             'parties', 'cities', 'banks', 'catalogues', 'groups',
-            'colors', 'sizes', 'products', 'combo_products', 'inwards', 'outwards', 'stitching'
+            'colors', 'sizes', 'products', 'combo_products', 'inwards', 'outwards', 'stitching', 'labours'
         ];
 
         // Try to load from server first
@@ -99,7 +99,9 @@ class BindiMarketApp {
 
                 // If not empty, or after migration check, load server data
                 listKeys.forEach(key => {
-                    this.db[key] = serverData[key] || [];
+                    if (serverData[key] !== undefined) {
+                        this.db[key] = serverData[key];
+                    }
                 });
                 console.log("Database loaded successfully from server.");
                 this.isServerConnected = true;
@@ -166,10 +168,11 @@ class BindiMarketApp {
                     
                     let changed = false;
                     listKeys.forEach(key => {
+                        if (serverData[key] === undefined) return;
                         const localStr = JSON.stringify(this.db[key]);
-                        const serverStr = JSON.stringify(serverData[key] || []);
+                        const serverStr = JSON.stringify(serverData[key]);
                         if (localStr !== serverStr) {
-                            this.db[key] = serverData[key] || [];
+                            this.db[key] = serverData[key];
                             changed = true;
                         }
                     });
@@ -242,7 +245,6 @@ class BindiMarketApp {
             });
         });
 
-        // Main Tab items (like Dashboard)
         const dashboardBtn = document.querySelector('.nav-item[data-tab="dashboard"]');
         if (dashboardBtn) {
             dashboardBtn.addEventListener('click', (e) => {
@@ -254,6 +256,20 @@ class BindiMarketApp {
 
                 dashboardBtn.classList.add('active');
                 this.switchTab('dashboard');
+            });
+        }
+
+        const labourMasterBtn = document.querySelector('.nav-item[data-tab="labour-master"]');
+        if (labourMasterBtn) {
+            labourMasterBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.querySelectorAll('.nav-submenu').forEach(sub => sub.classList.remove('show'));
+                document.querySelectorAll('.nav-item-toggle').forEach(t => t.classList.remove('open'));
+                document.querySelectorAll('.nav-submenu li').forEach(x => x.classList.remove('active'));
+                document.querySelectorAll('.nav-item').forEach(x => x.classList.remove('active'));
+
+                labourMasterBtn.classList.add('active');
+                this.switchTab('labour-master');
             });
         }
     }
@@ -306,6 +322,7 @@ class BindiMarketApp {
         document.getElementById('color-form').addEventListener('submit', (e) => this.handleColorSubmit(e));
         document.getElementById('size-form').addEventListener('submit', (e) => this.handleSizeSubmit(e));
         document.getElementById('product-form').addEventListener('submit', (e) => this.handleProductSubmit(e));
+        document.getElementById('labour-form').addEventListener('submit', (e) => this.handleLabourSubmit(e));
 
         // Combo Generator submission
         const genForm = document.getElementById('combo-generator-form');
@@ -489,31 +506,29 @@ class BindiMarketApp {
             stitchSearch.addEventListener('input', () => this.renderStitchingReport());
         }
 
-        const calcStitchTotal = () => {
-            const avg = parseFloat(document.getElementById('stitch-avg').value) || 0;
-            const cost = parseFloat(document.getElementById('stitch-sheet-cost').value) || 0;
-            const totalEl = document.getElementById('stitch-total');
-            if (totalEl) {
-                totalEl.value = (avg * cost).toFixed(2);
-            }
-        };
-        const avgEl = document.getElementById('stitch-avg');
-        const costEl = document.getElementById('stitch-sheet-cost');
-        if (avgEl) avgEl.addEventListener('input', calcStitchTotal);
-        if (costEl) costEl.addEventListener('input', calcStitchTotal);
+        const addStitchRowBtn = document.getElementById('btn-add-stitching-row');
+        if (addStitchRowBtn) {
+            addStitchRowBtn.addEventListener('click', () => this.addStitchingRow());
+        }
 
-        // Set up autocompletes for Stitching form
-        this.setupAutocomplete('stitch-item-name', 'stitch-item-name-results', () => {
-            return [...new Set(this.db.products.map(p => p.name))];
-        });
-
-        this.setupAutocomplete('stitch-size', 'stitch-size-results', () => {
-            return [...new Set(this.db.sizes.map(s => s.name))];
-        });
-
-        this.setupAutocomplete('stitch-color', 'stitch-color-results', () => {
-            return [...new Set(this.db.colors.map(c => c.name))];
-        });
+        // Labor Distribution events
+        const btnSearchLaborLot = document.getElementById('btn-search-labor-lot');
+        if (btnSearchLaborLot) {
+            btnSearchLaborLot.addEventListener('click', () => this.searchLaborLot());
+        }
+        const laborSearchLotInput = document.getElementById('labor-search-lot');
+        if (laborSearchLotInput) {
+            laborSearchLotInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.searchLaborLot();
+                }
+            });
+        }
+        const btnSaveLaborDist = document.getElementById('btn-save-labor-dist');
+        if (btnSaveLaborDist) {
+            btnSaveLaborDist.addEventListener('click', () => this.saveLaborDistribution());
+        }
     }
 
     switchTab(tabName) {
@@ -550,7 +565,11 @@ class BindiMarketApp {
             'add-outward': ['Add Outward Product', 'Export goods to wholesale buyers.'],
             'outward-report': ['Outward Reports', 'Browse sales invoices and outward ledger.'],
             'add-stitching': ['Add Stitching', 'Create a new stitching entry for bindi products.'],
-            'stitching-report': ['Stitching Report', 'Browse and manage stitching database records.']
+            'stitching-report': ['Stitching Report', 'Browse and manage stitching database records.'],
+            'labour-master': ['Labour Master', 'Manage labour profiles and identification numbers.'],
+            'labor-lot-wise': ['Labor Distribution - Lot Wise', 'Manage labor distribution by lot number.'],
+            'labor-labor-wise': ['Labor Distribution - Labor Wise', 'Manage labor distribution by individual labor worker.'],
+            'labor-assignment-report': ['Labour Assignment Report', 'Overview of lot assignments to registered labour workers.']
         };
 
         if (titles[tabName]) {
@@ -621,6 +640,18 @@ class BindiMarketApp {
                 break;
             case 'stitching-report':
                 this.renderStitchingReport();
+                break;
+            case 'labor-lot-wise':
+                this.resetLaborLotForm();
+                break;
+            case 'labor-labor-wise':
+                // no action needed
+                break;
+            case 'labour-master':
+                this.renderLabourMaster();
+                break;
+            case 'labor-assignment-report':
+                this.renderLaborAssignmentReport();
                 break;
         }
     }
@@ -2367,10 +2398,26 @@ class BindiMarketApp {
     // ==========================================
     // STITCHING MODULE
     // ==========================================
-    setupAutocomplete(inputId, resultsId, dataFetcher) {
-        const input = document.getElementById(inputId);
-        const results = document.getElementById(resultsId);
+    setupAutocomplete(inputOrId, resultsOrId, dataFetcher) {
+        const input = typeof inputOrId === 'string' ? document.getElementById(inputOrId) : inputOrId;
+        const results = typeof resultsOrId === 'string' ? document.getElementById(resultsOrId) : resultsOrId;
         if (!input || !results) return;
+
+        let activeIndex = -1;
+
+        const updateActiveItem = (items) => {
+            items.forEach((item, index) => {
+                if (index === activeIndex) {
+                    item.classList.add('active');
+                    item.style.backgroundColor = '#e2e8f0'; // highlight color
+                    item.style.color = '#0f172a';
+                } else {
+                    item.classList.remove('active');
+                    item.style.backgroundColor = '';
+                    item.style.color = '';
+                }
+            });
+        };
 
         const showResults = () => {
             const query = input.value.toLowerCase().trim();
@@ -2382,18 +2429,23 @@ class BindiMarketApp {
             if (matches.length === 0) {
                 results.innerHTML = '';
                 results.style.display = 'none';
+                activeIndex = -1;
                 return;
             }
 
             results.innerHTML = '';
+            activeIndex = -1;
             matches.slice(0, 10).forEach(item => {
                 const div = document.createElement('div');
                 div.className = 'search-results-item';
+                div.style.padding = '8px 12px';
+                div.style.cursor = 'pointer';
                 div.innerHTML = `<strong>${item}</strong>`;
                 div.addEventListener('click', () => {
                     input.value = item;
                     results.innerHTML = '';
                     results.style.display = 'none';
+                    activeIndex = -1;
                     // Trigger input and change events to update calculations
                     input.dispatchEvent(new Event('input'));
                     input.dispatchEvent(new Event('change'));
@@ -2406,39 +2458,291 @@ class BindiMarketApp {
         input.addEventListener('input', showResults);
         input.addEventListener('focus', showResults);
 
+        input.addEventListener('keydown', (e) => {
+            const items = results.querySelectorAll('.search-results-item');
+            if (!items.length || results.style.display === 'none') return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                activeIndex++;
+                if (activeIndex >= items.length) activeIndex = 0;
+                updateActiveItem(items);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                activeIndex--;
+                if (activeIndex < 0) activeIndex = items.length - 1;
+                updateActiveItem(items);
+            } else if (e.key === 'Enter') {
+                if (activeIndex >= 0 && activeIndex < items.length) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    items[activeIndex].click();
+                }
+            }
+        });
+
         // Close dropdown on click outside
         document.addEventListener('click', (e) => {
             if (!input.contains(e.target) && !results.contains(e.target)) {
                 results.style.display = 'none';
+                activeIndex = -1;
             }
         });
     }
 
+    setupArrowDownNavigation(inputEl, selector) {
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const currentRow = inputEl.closest('.stitching-item-row');
+                const prevRow = currentRow ? currentRow.previousElementSibling : null;
+                if (prevRow && prevRow.classList.contains('stitching-item-row')) {
+                    const prevInput = prevRow.querySelector(selector);
+                    if (prevInput) {
+                        inputEl.value = prevInput.value;
+                        // Dispatch events to trigger recalculations or logic
+                        inputEl.dispatchEvent(new Event('input'));
+                        inputEl.dispatchEvent(new Event('change'));
+                    }
+                }
+            }
+        });
+    }
+
+    addStitchingRow(defaultData = null) {
+        const container = document.getElementById('stitching-rows-container');
+        if (!container) return;
+
+        const rowId = 'stitch-' + Date.now() + Math.floor(Math.random() * 100);
+        const rowHTML = `
+            <div class="stitching-grid-row stitching-item-row" id="row-${rowId}">
+                <input type="hidden" class="stitch-row-id" value="${defaultData ? defaultData.id : ''}">
+                
+                <div style="position: relative;">
+                    <input type="text" class="form-control stitch-item-name" placeholder="Search..." autocomplete="off" required value="${defaultData ? defaultData.item_name || '' : ''}">
+                    <div class="search-results-dropdown stitch-item-name-results"></div>
+                </div>
+
+                <div>
+                    <input type="text" class="form-control stitch-bindi-bharti" placeholder="Count" required value="${defaultData ? defaultData.bindi_bharti || '' : ''}">
+                </div>
+
+                <div style="position: relative;">
+                    <input type="text" class="form-control stitch-size" placeholder="Size" autocomplete="off" required value="${defaultData ? defaultData.size || '' : ''}">
+                    <div class="search-results-dropdown stitch-size-results"></div>
+                </div>
+
+                <div style="position: relative;">
+                    <input type="text" class="form-control stitch-color" placeholder="Color" autocomplete="off" required value="${defaultData ? defaultData.color || '' : ''}">
+                    <div class="search-results-dropdown stitch-color-results"></div>
+                </div>
+
+                <div>
+                    <input type="number" class="form-control stitch-avg" placeholder="Avg" step="0.01" required value="${defaultData ? defaultData.avg || '' : ''}">
+                </div>
+
+                <div>
+                    <input type="number" class="form-control stitch-sheet-cost" placeholder="Sheet" step="0.01" required value="${defaultData ? defaultData.sheet_cost || '' : ''}">
+                </div>
+
+                <div>
+                    <input type="text" class="form-control stitch-total" placeholder="Total" style="font-weight: 700; color: var(--primary-color);" readonly value="${defaultData ? (defaultData.total || 0).toFixed(2) : '0.00'}">
+                </div>
+
+                <div>
+                    <button type="button" class="btn-remove-row" onclick="app.removeStitchingRow('${rowId}')"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', rowHTML);
+
+        const row = document.getElementById(`row-${rowId}`);
+        if (row) {
+            // Setup Autocompletes for this row
+            const itemNameInput = row.querySelector('.stitch-item-name');
+            const itemNameResults = row.querySelector('.stitch-item-name-results');
+            this.setupAutocomplete(itemNameInput, itemNameResults, () => {
+                return [...new Set(this.db.products.map(p => p.name))];
+            });
+
+            const sizeInput = row.querySelector('.stitch-size');
+            const sizeResults = row.querySelector('.stitch-size-results');
+            this.setupAutocomplete(sizeInput, sizeResults, () => {
+                return [...new Set(this.db.sizes.map(s => s.name))];
+            });
+
+            const colorInput = row.querySelector('.stitch-color');
+            const colorResults = row.querySelector('.stitch-color-results');
+            this.setupAutocomplete(colorInput, colorResults, () => {
+                return [...new Set(this.db.colors.map(c => c.name))];
+            });
+
+            // Setup calculations for this row
+            const avgInput = row.querySelector('.stitch-avg');
+            const costInput = row.querySelector('.stitch-sheet-cost');
+            const totalInput = row.querySelector('.stitch-total');
+
+            const calcRowTotal = () => {
+                const avg = parseFloat(avgInput.value) || 0;
+                const cost = parseFloat(costInput.value) || 0;
+                totalInput.value = (avg * cost).toFixed(2);
+            };
+
+            avgInput.addEventListener('input', calcRowTotal);
+            costInput.addEventListener('input', calcRowTotal);
+
+            // Enter key navigation inside the row
+            const bhartiInput = row.querySelector('.stitch-bindi-bharti');
+
+            itemNameInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    bhartiInput.focus();
+                }
+            });
+
+            bhartiInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    sizeInput.focus();
+                }
+            });
+
+            sizeInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    colorInput.focus();
+                }
+            });
+
+            colorInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    avgInput.focus();
+                }
+            });
+
+            avgInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    costInput.focus();
+                }
+            });
+
+            costInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+
+                    const rows = Array.from(container.querySelectorAll('.stitching-item-row'));
+                    const currentIndex = rows.indexOf(row);
+                    if (currentIndex === rows.length - 1) {
+                        // This is the last row, automatically add a new row
+                        this.addStitchingRow();
+
+                        // Focus the item name input of the new row
+                        const newRows = Array.from(container.querySelectorAll('.stitching-item-row'));
+                        const nextRow = newRows[currentIndex + 1];
+                        if (nextRow) {
+                            const nextItemNameInput = nextRow.querySelector('.stitch-item-name');
+                            if (nextItemNameInput) {
+                                nextItemNameInput.focus();
+                            }
+                        }
+                    } else {
+                        // Focus the next existing row's item name input
+                        const nextRow = rows[currentIndex + 1];
+                        if (nextRow) {
+                            const nextItemNameInput = nextRow.querySelector('.stitch-item-name');
+                            if (nextItemNameInput) {
+                                nextItemNameInput.focus();
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Setup Arrow Down Navigation for copying previous entry
+            this.setupArrowDownNavigation(itemNameInput, '.stitch-item-name');
+            this.setupArrowDownNavigation(bhartiInput, '.stitch-bindi-bharti');
+            this.setupArrowDownNavigation(sizeInput, '.stitch-size');
+            this.setupArrowDownNavigation(colorInput, '.stitch-color');
+            this.setupArrowDownNavigation(avgInput, '.stitch-avg');
+            this.setupArrowDownNavigation(costInput, '.stitch-sheet-cost');
+        }
+    }
+
+    removeStitchingRow(rowId) {
+        const rows = document.querySelectorAll('.stitching-item-row');
+        if (rows.length <= 1) {
+            alert("At least one stitching row is required.");
+            return;
+        }
+        const row = document.getElementById(`row-${rowId}`);
+        if (row) row.remove();
+    }
+
     resetStitchingForm() {
-        const form = document.getElementById('stitching-form');
-        if (form) form.reset();
-        const idInput = document.getElementById('stitch-id');
-        if (idInput) idInput.value = '';
-        const totalInput = document.getElementById('stitch-total');
-        if (totalInput) totalInput.value = '0.00';
+        const container = document.getElementById('stitching-rows-container');
+        if (container) {
+            container.innerHTML = '';
+        }
+        const lotInput = document.getElementById('stitch-lot-no');
+        if (lotInput) {
+            lotInput.value = '';
+        }
+        const header = document.querySelector('#tab-add-stitching h3');
+        if (header) {
+            header.innerText = 'Add Stitching Entry';
+        }
+        this.addStitchingRow();
     }
 
     handleStitchingSubmit(e) {
         e.preventDefault();
-        const id = document.getElementById('stitch-id').value;
-        const item_name = document.getElementById('stitch-item-name').value.trim();
-        const bindi_bharti = document.getElementById('stitch-bindi-bharti').value.trim();
-        const size = document.getElementById('stitch-size').value.trim();
-        const color = document.getElementById('stitch-color').value.trim();
-        const avg = parseFloat(document.getElementById('stitch-avg').value) || 0;
-        const sheet_cost = parseFloat(document.getElementById('stitch-sheet-cost').value) || 0;
-        const total = parseFloat((avg * sheet_cost).toFixed(2));
+        const lotInput = document.getElementById('stitch-lot-no');
+        const lot_no = lotInput ? lotInput.value.trim() : '';
 
-        if (id) {
-            const idx = this.db.stitching.findIndex(s => s.id === id || s.id === parseInt(id));
-            if (idx !== -1) {
-                this.db.stitching[idx] = {
-                    ...this.db.stitching[idx],
+        const rows = document.querySelectorAll('.stitching-item-row');
+        if (rows.length === 0) {
+            alert("Please add at least one stitching entry.");
+            return;
+        }
+
+        let savedCount = 0;
+        rows.forEach((row, index) => {
+            const idInput = row.querySelector('.stitch-row-id');
+            const id = idInput ? idInput.value : '';
+            const item_name = row.querySelector('.stitch-item-name').value.trim();
+            const bindi_bharti = row.querySelector('.stitch-bindi-bharti').value.trim();
+            const size = row.querySelector('.stitch-size').value.trim();
+            const color = row.querySelector('.stitch-color').value.trim();
+            const avg = parseFloat(row.querySelector('.stitch-avg').value) || 0;
+            const sheet_cost = parseFloat(row.querySelector('.stitch-sheet-cost').value) || 0;
+            const total = parseFloat((avg * sheet_cost).toFixed(2));
+
+            if (id) {
+                const idx = this.db.stitching.findIndex(s => s.id === id || s.id === parseInt(id));
+                if (idx !== -1) {
+                    this.db.stitching[idx] = {
+                        ...this.db.stitching[idx],
+                        lot_no,
+                        item_name,
+                        bindi_bharti,
+                        size,
+                        color,
+                        avg,
+                        sheet_cost,
+                        total,
+                        entry_by: "Heet Punamiya"
+                    };
+                }
+            } else {
+                const newId = Date.now() + index;
+                this.db.stitching.push({
+                    id: newId,
+                    lot_no,
                     item_name,
                     bindi_bharti,
                     size,
@@ -2446,27 +2750,15 @@ class BindiMarketApp {
                     avg,
                     sheet_cost,
                     total,
+                    date: new Date().toISOString(),
                     entry_by: "Heet Punamiya"
-                };
+                });
             }
-        } else {
-            const newId = Date.now();
-            this.db.stitching.push({
-                id: newId,
-                item_name,
-                bindi_bharti,
-                size,
-                color,
-                avg,
-                sheet_cost,
-                total,
-                date: new Date().toISOString(),
-                entry_by: "Heet Punamiya"
-            });
-        }
+            savedCount++;
+        });
 
         this.saveDB('stitching');
-        alert("Stitching record saved successfully!");
+        alert(`${savedCount} stitching record(s) saved successfully!`);
         this.resetStitchingForm();
         this.switchTab('stitching-report');
     }
@@ -2480,6 +2772,7 @@ class BindiMarketApp {
         const search = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
         const filtered = this.db.stitching.filter(s =>
+            (s.lot_no || '').toLowerCase().includes(search) ||
             (s.item_name || '').toLowerCase().includes(search) ||
             (s.bindi_bharti || '').toLowerCase().includes(search) ||
             (s.size || '').toLowerCase().includes(search) ||
@@ -2491,26 +2784,51 @@ class BindiMarketApp {
             return;
         }
 
+        // Group filtered entries by lot_no
+        const groups = {};
         filtered.forEach(s => {
+            const lot = s.lot_no || 'N/A';
+            if (!groups[lot]) {
+                groups[lot] = [];
+            }
+            groups[lot].push(s);
+        });
+
+        // Loop over each lot group
+        for (const lot_no in groups) {
+            // Render a Group Header row
             tbody.innerHTML += `
-                <tr>
-                    <td>${s.id}</td>
-                    <td><strong>${s.item_name}</strong></td>
-                    <td>${s.bindi_bharti}</td>
-                    <td><span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">${s.size}</span></td>
-                    <td><span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">${s.color}</span></td>
-                    <td>${s.avg}</td>
-                    <td>₹${s.sheet_cost.toFixed(2)}</td>
-                    <td><strong style="color: var(--primary-color);">₹${s.total.toFixed(2)}</strong></td>
-                    <td>
-                        <div class="action-btns">
-                            <button class="btn btn-primary btn-sm" onclick="app.editStitching(${s.id})"><i class="fa-solid fa-edit"></i></button>
-                            <button class="btn btn-secondary btn-sm" onclick="app.deleteStitching(${s.id})"><i class="fa-solid fa-trash"></i></button>
-                        </div>
+                <tr style="background-color: #f8fafc; font-weight: 700; border-top: 2px solid var(--border-color);">
+                    <td colspan="9" style="font-size: 0.95rem; color: #0f172a; padding: 12px 15px;">
+                        <i class="fa-solid fa-box" style="margin-right: 6px; color: #058882;"></i>
+                        Lot No: <span style="color: #058882; font-weight: 800;">${lot_no}</span>
                     </td>
                 </tr>
             `;
-        });
+
+            // Render each entry in the lot group
+            groups[lot_no].forEach((s, index) => {
+                const serialNum = index + 1;
+                tbody.innerHTML += `
+                    <tr>
+                        <td>S.No ${serialNum} <span style="font-size: 0.75rem; color: var(--text-muted); display: block;">ID: ${s.id}</span></td>
+                        <td><strong>${s.item_name}</strong></td>
+                        <td>${s.bindi_bharti}</td>
+                        <td><span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">${s.size}</span></td>
+                        <td><span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">${s.color}</span></td>
+                        <td>${s.avg}</td>
+                        <td>${s.sheet_cost.toFixed(2)}</td>
+                        <td><strong style="color: var(--primary-color);">${s.total.toFixed(2)}</strong></td>
+                        <td>
+                            <div class="action-btns">
+                                <button class="btn btn-primary btn-sm" onclick="app.editStitching(${s.id})"><i class="fa-solid fa-edit"></i></button>
+                                <button class="btn btn-secondary btn-sm" onclick="app.deleteStitching(${s.id})"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
     }
 
     editStitching(id) {
@@ -2519,14 +2837,22 @@ class BindiMarketApp {
 
         this.switchTab('add-stitching');
 
-        document.getElementById('stitch-id').value = s.id;
-        document.getElementById('stitch-item-name').value = s.item_name || '';
-        document.getElementById('stitch-bindi-bharti').value = s.bindi_bharti || '';
-        document.getElementById('stitch-size').value = s.size || '';
-        document.getElementById('stitch-color').value = s.color || '';
-        document.getElementById('stitch-avg').value = s.avg || 0;
-        document.getElementById('stitch-sheet-cost').value = s.sheet_cost || 0;
-        document.getElementById('stitch-total').value = (s.total || 0).toFixed(2);
+        const container = document.getElementById('stitching-rows-container');
+        if (container) {
+            container.innerHTML = '';
+        }
+        
+        const header = document.querySelector('#tab-add-stitching h3');
+        if (header) {
+            header.innerText = 'Edit Stitching Entry';
+        }
+
+        const lotInput = document.getElementById('stitch-lot-no');
+        if (lotInput) {
+            lotInput.value = s.lot_no || '';
+        }
+
+        this.addStitchingRow(s);
     }
 
     deleteStitching(id) {
@@ -2534,6 +2860,350 @@ class BindiMarketApp {
         this.db.stitching = this.db.stitching.filter(s => s.id !== id && s.id !== parseInt(id));
         this.saveDB('stitching');
         this.renderStitchingReport();
+    }
+
+    // ==========================================
+    // LABOR DISTRIBUTION MODULE
+    // ==========================================
+    resetLaborLotForm() {
+        const lotInput = document.getElementById('labor-search-lot');
+        if (lotInput) lotInput.value = '';
+
+        const reportArea = document.getElementById('labor-lot-report-area');
+        if (reportArea) reportArea.style.display = 'none';
+
+        const messageDiv = document.getElementById('labor-lot-message');
+        if (messageDiv) {
+            messageDiv.style.display = 'none';
+            messageDiv.innerText = '';
+        }
+
+        const loadingDiv = document.getElementById('labor-lot-loading');
+        if (loadingDiv) loadingDiv.style.display = 'none';
+    }
+
+    searchLaborLot() {
+        const lotInput = document.getElementById('labor-search-lot');
+        const lot_no = lotInput ? lotInput.value.trim() : '';
+
+        const reportArea = document.getElementById('labor-lot-report-area');
+        const messageDiv = document.getElementById('labor-lot-message');
+        const loadingDiv = document.getElementById('labor-lot-loading');
+        const tbody = document.querySelector('#labor-lot-table tbody');
+
+        if (!lot_no) {
+            alert("Please enter a Lot Number to search.");
+            return;
+        }
+
+        // Show loading state
+        if (reportArea) reportArea.style.display = 'none';
+        if (messageDiv) messageDiv.style.display = 'none';
+        if (loadingDiv) loadingDiv.style.display = 'block';
+
+        // Search in local DB (simulated database query delay)
+        setTimeout(() => {
+            if (loadingDiv) loadingDiv.style.display = 'none';
+
+            const filtered = this.db.stitching.filter(s => 
+                (s.lot_no || '').toLowerCase() === lot_no.toLowerCase()
+            );
+
+            if (filtered.length === 0) {
+                if (messageDiv) {
+                    messageDiv.innerText = "No stitching report found for this lot number.";
+                    messageDiv.className = "alert alert-warning";
+                    messageDiv.style.display = 'block';
+                }
+                return;
+            }
+
+            if (!this.db.labours) this.db.labours = [];
+
+            // Populate table rows
+            if (tbody) {
+                tbody.innerHTML = '';
+                filtered.forEach(s => {
+                    const formattedDate = s.date ? new Date(s.date).toLocaleDateString('en-GB') : 'N/A';
+                    const totalSheets = s.sheet_cost || 0;
+                    const sheetGiven = s.sheet_given !== undefined ? s.sheet_given : 0;
+                    const remaining = totalSheets - sheetGiven;
+
+                    const remainingStyle = remaining > 0 
+                        ? 'background-color: #fee2e2; color: #ef4444;' 
+                        : 'background-color: #d1fae5; color: #065f46;';
+
+                    const labourOptions = this.db.labours.map(l => `
+                        <option value="${l.labour_no}" ${s.labour_no === l.labour_no ? 'selected' : ''}>
+                            ${l.labour_no}
+                        </option>
+                    `).join('');
+
+                    const labourObj = this.db.labours.find(l => l.labour_no === s.labour_no);
+                    const labourName = labourObj ? labourObj.name : '';
+
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>
+                                <select class="form-control edit-dist-labour-no" data-id="${s.id}" style="width: 140px;" required>
+                                    <option value="">Select Labour</option>
+                                    ${labourOptions}
+                                </select>
+                            </td>
+                            <td class="edit-dist-labour-name" style="font-weight: 600;">${labourName}</td>
+                            <td>${formattedDate}</td>
+                            <td><strong>${s.item_name || 'N/A'}</strong></td>
+                            <td>${s.bindi_bharti || 'N/A'}</td>
+                            <td>
+                                <span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">
+                                    ${s.color || 'N/A'}
+                                </span>
+                            </td>
+                            <td>${totalSheets}</td>
+                            <td>${s.avg || 0}</td>
+                            <td><strong>${s.total || 0}</strong></td>
+                            <td>
+                                <input type="number" class="form-control edit-dist-sheet-given" data-id="${s.id}" data-total-sheets="${totalSheets}" value="${s.sheet_given !== undefined ? s.sheet_given : ''}" style="width: 120px;" step="0.01" min="0" required placeholder="0.00">
+                            </td>
+                            <td>
+                                <span class="remaining-badge-${s.id} badge-status" style="${remainingStyle} font-weight: 700; padding: 6px 12px; border-radius: 4px; display: inline-block;">
+                                    ${remaining.toFixed(2)}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                // Attach select change listener to update labour name column
+                tbody.querySelectorAll('.edit-dist-labour-no').forEach(select => {
+                    select.addEventListener('change', () => {
+                        const selectedVal = select.value;
+                        const lObj = this.db.labours.find(l => l.labour_no === selectedVal);
+                        const nameCell = select.closest('tr').querySelector('.edit-dist-labour-name');
+                        if (nameCell) {
+                            nameCell.innerText = lObj ? lObj.name : '';
+                        }
+                    });
+                });
+
+                // Attach dynamic update listeners to "Sheet Given" inputs
+                tbody.querySelectorAll('.edit-dist-sheet-given').forEach(input => {
+                    input.addEventListener('input', () => {
+                        const id = input.getAttribute('data-id');
+                        const total = parseFloat(input.getAttribute('data-total-sheets')) || 0;
+                        const given = parseFloat(input.value) || 0;
+                        const rem = total - given;
+
+                        const badge = tbody.querySelector(`.remaining-badge-${id}`);
+                        if (badge) {
+                            badge.innerText = rem.toFixed(2);
+                            if (rem > 0) {
+                                badge.style.backgroundColor = '#fee2e2';
+                                badge.style.color = '#ef4444';
+                            } else {
+                                badge.style.backgroundColor = '#d1fae5';
+                                badge.style.color = '#065f46';
+                            }
+                        }
+                    });
+                });
+            }
+
+            if (reportArea) reportArea.style.display = 'block';
+        }, 500);
+    }
+
+    saveLaborDistribution() {
+        const labourSelects = document.querySelectorAll('.edit-dist-labour-no');
+        const sheetGivenInputs = document.querySelectorAll('.edit-dist-sheet-given');
+
+        let hasValidationErrors = false;
+        const updates = [];
+
+        labourSelects.forEach((labourSelect, index) => {
+            const sheetGivenInput = sheetGivenInputs[index];
+            const id = labourSelect.getAttribute('data-id');
+
+            const labourNo = labourSelect.value;
+            const totalSheets = parseFloat(sheetGivenInput.getAttribute('data-total-sheets')) || 0;
+            const sheetGivenVal = parseFloat(sheetGivenInput.value);
+
+            if (!labourNo) {
+                alert(`Row ${index + 1}: Please select a Labour Worker.`);
+                hasValidationErrors = true;
+                return;
+            }
+
+            if (isNaN(sheetGivenVal) || sheetGivenVal < 0) {
+                alert(`Row ${index + 1}: Sheet Given must be a valid non-negative number.`);
+                hasValidationErrors = true;
+                return;
+            }
+
+            if (sheetGivenVal > totalSheets) {
+                alert(`Row ${index + 1}: Sheet Given (${sheetGivenVal}) cannot exceed Total Sheets (${totalSheets}).`);
+                hasValidationErrors = true;
+                return;
+            }
+
+            updates.push({ id, labourNo, sheetGivenVal });
+        });
+
+        if (hasValidationErrors) return;
+
+        // Perform updates on the DB
+        let updateCount = 0;
+        updates.forEach(up => {
+            const idx = this.db.stitching.findIndex(s => s.id === up.id || s.id === parseInt(up.id));
+            if (idx !== -1) {
+                this.db.stitching[idx].labour_no = up.labourNo;
+                this.db.stitching[idx].sheet_given = up.sheetGivenVal;
+                updateCount++;
+            }
+        });
+
+        if (updateCount > 0) {
+            this.saveDB('stitching');
+            alert("Labor distribution details saved successfully!");
+            // Refresh table
+            this.searchLaborLot();
+        } else {
+            alert("No matching stitching records found to update.");
+        }
+    }
+
+    // ==========================================
+    // LABOUR MASTER & ASSIGNMENT REPORT
+    // ==========================================
+    handleLabourSubmit(e) {
+        e.preventDefault();
+        const nameInput = document.getElementById('labour-name');
+        const name = nameInput ? nameInput.value.trim() : '';
+
+        if (!name) {
+            alert("Labour Name is required.");
+            return;
+        }
+
+        if (!this.db.labours) this.db.labours = [];
+
+        // Generate Labour Number (e.g. LAB-1001)
+        let nextNum = 1001;
+        if (this.db.labours.length > 0) {
+            this.db.labours.forEach(l => {
+                const match = (l.labour_no || '').match(/LAB-(\d+)/);
+                if (match) {
+                    const num = parseInt(match[1]);
+                    if (num >= nextNum) {
+                        nextNum = num + 1;
+                    }
+                }
+            });
+        }
+        const labourNo = `LAB-${nextNum}`;
+
+        const newLabour = {
+            id: Date.now(),
+            labour_no: labourNo,
+            name: name
+        };
+
+        this.db.labours.push(newLabour);
+        this.saveDB('labours');
+
+        if (nameInput) nameInput.value = '';
+        alert(`Labour registered successfully! Assigned Labour No: ${labourNo}`);
+        this.renderLabourMaster();
+    }
+
+    renderLabourMaster() {
+        if (!this.db.labours) this.db.labours = [];
+
+        const tbody = document.querySelector('#labour-table tbody');
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+        this.db.labours.forEach(l => {
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${l.labour_no || 'N/A'}</strong></td>
+                    <td>${l.name || 'N/A'}</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger btn-delete-labour" data-id="${l.id}" style="padding: 4px 8px; font-size: 0.85rem;">
+                            <i class="fa-solid fa-trash"></i> Delete
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        // Wire delete buttons
+        tbody.querySelectorAll('.btn-delete-labour').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = parseInt(btn.getAttribute('data-id'));
+                if (confirm("Are you sure you want to delete this labour worker?")) {
+                    this.db.labours = this.db.labours.filter(l => l.id !== id);
+                    this.saveDB('labours');
+                    this.renderLabourMaster();
+                }
+            });
+        });
+    }
+
+    renderLaborAssignmentReport() {
+        if (!this.db.labours) this.db.labours = [];
+        if (!this.db.stitching) this.db.stitching = [];
+
+        const tbody = document.querySelector('#labor-assignment-report-table tbody');
+        if (!tbody) return;
+
+        tbody.innerHTML = '';
+        const assigned = this.db.stitching.filter(s => s.labour_no);
+
+        if (assigned.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="11" style="text-align: center; color: var(--text-muted); padding: 20px;">
+                        No lot assignments found. Set assignments under the "Lot Wise" tab.
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        assigned.forEach(s => {
+            const formattedDate = s.date ? new Date(s.date).toLocaleDateString('en-GB') : 'N/A';
+            const totalSheets = s.sheet_cost || 0;
+            const sheetGiven = s.sheet_given || 0;
+            const remaining = totalSheets - sheetGiven;
+            
+            const statusBadge = remaining === 0 
+                ? `<span class="badge-status" style="background-color: #d1fae5; color: #065f46; font-weight: 700; padding: 4px 8px; border-radius: 4px;">Complete</span>`
+                : `<span class="badge-status" style="background-color: #fee2e2; color: #ef4444; font-weight: 700; padding: 4px 8px; border-radius: 4px;">Pending</span>`;
+
+            const lObj = this.db.labours.find(l => l.labour_no === s.labour_no);
+            const name = lObj ? lObj.name : 'Unknown';
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>${formattedDate}</td>
+                    <td><strong>${s.lot_no || 'N/A'}</strong></td>
+                    <td><strong>${s.labour_no}</strong></td>
+                    <td>${name}</td>
+                    <td><strong>${s.item_name || 'N/A'}</strong></td>
+                    <td>${s.bindi_bharti || 'N/A'}</td>
+                    <td>
+                        <span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">
+                            ${s.color || 'N/A'}
+                        </span>
+                    </td>
+                    <td>${totalSheets}</td>
+                    <td>${sheetGiven}</td>
+                    <td>${remaining.toFixed(2)}</td>
+                    <td>${statusBadge}</td>
+                </tr>
+            `;
+        });
     }
 }
 
