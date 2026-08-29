@@ -2931,10 +2931,10 @@ class BindiMarketApp {
     }
 
     renderLaborLotTable(filtered) {
-        const tbody = document.querySelector('#labor-lot-table tbody');
-        if (!tbody) return;
+        const container = document.querySelector('#labor-lot-container');
+        if (!container) return;
 
-        tbody.innerHTML = '';
+        container.innerHTML = '';
         filtered.forEach(s => {
             const formattedDate = s.date ? new Date(s.date).toLocaleDateString('en-GB') : 'N/A';
             const totalSheets = s.sheet_cost || 0;
@@ -2962,11 +2962,13 @@ class BindiMarketApp {
             const totalGiven = s.assignments.reduce((sum, a) => sum + (parseFloat(a.sheet_given) || 0), 0);
             const remaining = totalSheets - totalGiven;
 
-            s.assignments.forEach((asg, asgIndex) => {
-                const remainingStyle = remaining > 0 
-                    ? 'background-color: #fee2e2; color: #ef4444;' 
-                    : 'background-color: #d1fae5; color: #065f46;';
+            const remainingStyle = remaining > 0 
+                ? 'background-color: #fee2e2; color: #ef4444;' 
+                : 'background-color: #d1fae5; color: #065f46;';
 
+            let tableRowsHtml = '';
+
+            s.assignments.forEach((asg, asgIndex) => {
                 const labourOptions = this.db.labours.map(l => `
                     <option value="${l.labour_no}" ${asg.labour_no === l.labour_no ? 'selected' : ''}>
                         ${l.labour_no}
@@ -2977,48 +2979,72 @@ class BindiMarketApp {
                 const labourName = labourObj ? labourObj.name : '';
 
                 const actionBtn = asgIndex === 0 
-                    ? `<button type="button" class="btn btn-sm btn-success btn-add-assignment" data-id="${s.id}" style="padding: 4px 8px; font-size: 0.85rem;"><i class="fa-solid fa-plus"></i> Add Labour</button>`
-                    : `<button type="button" class="btn btn-sm btn-danger btn-remove-assignment" data-id="${s.id}" data-index="${asgIndex}" style="padding: 4px 8px; font-size: 0.85rem;"><i class="fa-solid fa-trash"></i></button>`;
+                    ? `<button type="button" class="btn btn-sm btn-success btn-add-assignment" data-id="${s.id}" style="padding: 6px 12px; font-size: 0.85rem;"><i class="fa-solid fa-plus"></i> Add Labour</button>`
+                    : `<button type="button" class="btn btn-sm btn-danger btn-remove-assignment" data-id="${s.id}" data-index="${asgIndex}" style="padding: 6px 12px; font-size: 0.85rem;"><i class="fa-solid fa-trash"></i></button>`;
 
-                tbody.innerHTML += `
-                    <tr class="stitch-row-group-${s.id}" data-stitch-id="${s.id}">
+                tableRowsHtml += `
+                    <tr class="labor-assignment-row" data-stitch-id="${s.id}">
                         <td>
-                            <select class="form-control edit-dist-labour-no" data-id="${s.id}" data-index="${asgIndex}" style="width: 140px;" required>
+                            <select class="form-control edit-dist-labour-no" data-id="${s.id}" data-index="${asgIndex}" style="width: 160px;" required>
                                 <option value="">Select Labour</option>
                                 ${labourOptions}
                             </select>
                         </td>
-                        <td class="edit-dist-labour-name" style="font-weight: 600;">${labourName}</td>
-                        <td>${formattedDate}</td>
-                        <td><strong>${s.item_name || 'N/A'}</strong></td>
-                        <td>${s.bindi_bharti || 'N/A'}</td>
+                        <td class="edit-dist-labour-name" style="font-weight: 600; vertical-align: middle; font-size: 0.95rem;">${labourName}</td>
                         <td>
-                            <span class="badge-status" style="background-color: #f1f5f9; color: #475569; padding: 4px 8px; border-radius: 4px;">
-                                ${s.color || 'N/A'}
-                            </span>
+                            <input type="number" class="form-control edit-dist-sheet-given" data-id="${s.id}" data-index="${asgIndex}" data-total-sheets="${totalSheets}" value="${asg.sheet_given !== undefined && asg.sheet_given !== 0 ? asg.sheet_given : ''}" style="width: 140px;" step="0.01" min="0" required placeholder="0.00">
                         </td>
-                        <td>${totalSheets}</td>
-                        <td>${s.avg || 0}</td>
-                        <td><strong>${s.total || 0}</strong></td>
-                        <td>
-                            <input type="number" class="form-control edit-dist-sheet-given" data-id="${s.id}" data-index="${asgIndex}" data-total-sheets="${totalSheets}" value="${asg.sheet_given !== undefined && asg.sheet_given !== 0 ? asg.sheet_given : ''}" style="width: 120px;" step="0.01" min="0" required placeholder="0.00">
-                        </td>
-                        <td>
-                            <span class="remaining-badge-${s.id} badge-status" style="${remainingStyle} font-weight: 700; padding: 6px 12px; border-radius: 4px; display: inline-block;">
-                                ${remaining.toFixed(2)}
-                            </span>
-                        </td>
-                        <td style="text-align: center;">
+                        <td style="text-align: center; vertical-align: middle;">
                             ${actionBtn}
                         </td>
                     </tr>
                 `;
             });
+
+            container.innerHTML += `
+                <div class="card mb-4" style="border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); margin-bottom: 24px;">
+                    <!-- Product Header Box -->
+                    <div class="card-header" style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                        <div style="font-weight: 700; font-size: 1.05rem; color: #1e293b;">
+                            Bindi Item: <span style="color: #058882;">${s.item_name || 'N/A'}</span>
+                            <span style="font-weight: 400; color: #64748b; margin-left: 10px; font-size: 0.9rem;">(Color: ${s.color || 'N/A'}, Bharti: ${s.bindi_bharti || 'N/A'}, Date: ${formattedDate})</span>
+                        </div>
+                        <div style="display: flex; gap: 15px; font-size: 0.9rem; font-weight: 600; color: #475569; align-items: center;">
+                            <div>Lot Sheet Total: <strong style="color: #0f766e;">${totalSheets}</strong></div>
+                            <div>Avg: <strong>${s.avg || 0}</strong></div>
+                            <div>Total Bindi: <strong>${s.total || 0}</strong></div>
+                            <div style="border-left: 1px solid #cbd5e1; padding-left: 15px; display: flex; align-items: center; gap: 8px;">
+                                Remaining: 
+                                <span class="remaining-badge-${s.id} badge-status" style="${remainingStyle} font-weight: 700; padding: 4px 10px; border-radius: 4px; display: inline-block;">
+                                    ${remaining.toFixed(2)}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Assignments Table for this Product -->
+                    <div class="table-responsive">
+                        <table class="table mb-0" style="margin-bottom: 0;">
+                            <thead class="table-light" style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                                <tr>
+                                    <th style="width: 200px;">Labour No *</th>
+                                    <th>Labour Name</th>
+                                    <th style="width: 180px;">Sheet Given *</th>
+                                    <th style="width: 150px; text-align: center;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRowsHtml}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
         });
 
         // Attach select change listener to update labour name column
-        tbody.querySelectorAll('.edit-dist-labour-no').forEach(select => {
-            select.addEventListener('change', () => {
+        container.querySelectorAll('.edit-dist-labour-no').forEach(select => {
+            select.addEventListener('change', (e) => {
                 const selectedVal = select.value;
                 const lObj = this.db.labours.find(l => l.labour_no === selectedVal);
                 const nameCell = select.closest('tr').querySelector('.edit-dist-labour-name');
@@ -3029,20 +3055,20 @@ class BindiMarketApp {
         });
 
         // Attach dynamic update listeners to "Sheet Given" inputs
-        tbody.querySelectorAll('.edit-dist-sheet-given').forEach(input => {
+        container.querySelectorAll('.edit-dist-sheet-given').forEach(input => {
             input.addEventListener('input', () => {
                 const id = input.getAttribute('data-id');
                 const total = parseFloat(input.getAttribute('data-total-sheets')) || 0;
                 
                 // Sum all sheet_given inputs for this stitching ID in the DOM
                 let sum = 0;
-                tbody.querySelectorAll(`.edit-dist-sheet-given[data-id="${id}"]`).forEach(inp => {
+                container.querySelectorAll(`.edit-dist-sheet-given[data-id="${id}"]`).forEach(inp => {
                     sum += parseFloat(inp.value) || 0;
                 });
                 
                 const rem = total - sum;
 
-                tbody.querySelectorAll(`.remaining-badge-${id}`).forEach(badge => {
+                container.querySelectorAll(`.remaining-badge-${id}`).forEach(badge => {
                     badge.innerText = rem.toFixed(2);
                     if (rem > 0) {
                         badge.style.backgroundColor = '#fee2e2';
@@ -3056,7 +3082,7 @@ class BindiMarketApp {
         });
 
         // Attach event listeners for Add Labour button
-        tbody.querySelectorAll('.btn-add-assignment').forEach(btn => {
+        container.querySelectorAll('.btn-add-assignment').forEach(btn => {
             btn.addEventListener('click', () => {
                 const id = btn.getAttribute('data-id');
                 this.syncLaborInputsToMemory();
@@ -3080,7 +3106,7 @@ class BindiMarketApp {
         });
 
         // Attach event listeners for Remove Labour button
-        tbody.querySelectorAll('.btn-remove-assignment').forEach(btn => {
+        container.querySelectorAll('.btn-remove-assignment').forEach(btn => {
             btn.addEventListener('click', () => {
                 const id = btn.getAttribute('data-id');
                 const index = parseInt(btn.getAttribute('data-index'));
@@ -3103,7 +3129,7 @@ class BindiMarketApp {
     }
 
     syncLaborInputsToMemory() {
-        const rows = document.querySelectorAll('#labor-lot-table tbody tr');
+        const rows = document.querySelectorAll('#labor-lot-container .labor-assignment-row');
         const tempAssignments = {};
 
         rows.forEach(row => {
